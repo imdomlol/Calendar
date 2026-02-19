@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo.env
+
+# Node.js
+node_modules/
