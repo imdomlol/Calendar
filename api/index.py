@@ -8,6 +8,8 @@ supabase = create_client(
     os.environ["SUPABASE_KEY"]
 )
 
+print("Supabase client initialized successfully")
+
 def handler(request):
     # Vercel's runtime passes a dictionary-like request object
     if request["httpMethod"] == "POST":
