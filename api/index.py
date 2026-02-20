@@ -1,26 +1,49 @@
 import os
+import json
 from supabase import create_client
 
+# Initialize Supabase client
 supabase = create_client(
-    os.environ["SUPABASE_URL"], 
-    os.environ["SUPABASE_KEY"],
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_KEY"]
 )
 
 def handler(request):
-    if request.method == "POST":
-        data = request.get_json()
-        name = data.get("name")
-        email = data.get("email")
+    # Vercel's runtime passes a dictionary-like request object
+    if request["httpMethod"] == "POST":
+        try:
+            data = request.get("body")
+            if data:
+                data = json.loads(data)
+                name = data.get("name")
+                email = data.get("email")
 
-        if not name or not email:
-            return {"error": "Name and email are required"}, 400
+                if not name or not email:
+                    return {
+                        "statusCode": 400,
+                        "body": '{"error": "Name and email are required"}'
+                    }
 
-        # Insert the new user into the database
-        response = supabase.table("users").insert({"name": name, "email": email}).execute()
+                # Insert into Supabase
+                response = supabase.table("users").insert({"name": name, "email": email}).execute()
 
-        if response.status_code == 201:
-            return {"message": "User created successfully"}, 201
-        else:
-            return {"error": "Failed to create user"}, 500
+                if response.status_code == 201:
+                    return {
+                        "statusCode": 201,
+                        "body": '{"message": "User created successfully"}'
+                    }
+                else:
+                    return {
+                        "statusCode": 500,
+                        "body": '{"error": "Failed to create user"}'
+                    }
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "body": f'{{"error": "{str(e)}"}}'
+            }
 
-    return {"message": "Welcome to the API!"}, 200
+    return {
+        "statusCode": 200,
+        "body": '{"message": "Welcome to the API!"}'
+    }
