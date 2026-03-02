@@ -1,3 +1,1 @@
-supabase-py
-json
-os
+supabase
