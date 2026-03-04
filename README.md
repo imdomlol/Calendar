@@ -2,95 +2,173 @@
 
 Calendar website for 362.
 
-## If You Are New to Python Projects
+## 1) What You Need
 
-This project uses a **virtual environment** (`.venv`).
+- Git installed
+- Python 3.12+
 
-Think of `.venv` as a private Python box for this project only. It keeps this project's packages separate from other projects on your computer.
+## 2) Get the Project on Your Computer
 
-## What You Need First
-
-- Python 3.12 or newer
-
-## First-Time Setup (Everyone)
-
-Open a terminal in the project folder, then run:
+### Option A: You have write access to this repository
 
 ```bash
-python -m venv .venv
+git clone https://github.com/imdomlol/Calendar.git
+cd Calendar
 ```
 
-If `python` does not work on your machine, try `python3` (Linux/macOS) or `py` (Windows).
+### Option B: You do NOT have write access
 
-## Activate the Virtual Environment
+1. Fork this repository in GitHub (top-right "Fork" button).
+2. Clone your fork:
 
-### Windows (PowerShell)
+```bash
+git clone https://github.com/<your-username>/Calendar.git
+cd Calendar
+```
+
+3. Add the original repository as `upstream`:
+
+```bash
+git remote add upstream https://github.com/imdomlol/Calendar.git
+```
+
+## 3) Create and Activate a Virtual Environment
+
+Run this from the project root.
+
+### Create
+
+```bash
+python3 -m venv .venv
+```
+
+If your machine uses `python` instead of `python3`, use `python -m venv .venv`.
+
+### Activate
+
+Windows (PowerShell):
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-### Windows (Command Prompt)
+Windows (Command Prompt):
 
 ```bat
 .venv\Scripts\activate.bat
 ```
 
-### macOS / Linux
+macOS/Linux:
 
 ```bash
 source .venv/bin/activate
 ```
 
-When activated, your terminal usually shows `(.venv)` at the beginning.
+You should now see `(.venv)` at the beginning of your terminal prompt.
 
-## Install Dependencies
+## 4) Install Dependencies
 
-With the virtual environment active:
+With `.venv` activated:
 
 ```bash
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.txt
 ```
 
-## Set Required Environment Variables
+## 5) Set Environment Variables (Required)
 
-This API needs:
+This project expects:
 
 - `SUPABASE_URL`
 - `SUPABASE_KEY`
 
-### macOS / Linux
+macOS/Linux:
 
 ```bash
-export SUPABASE_URL="https://OUR_LINK.supabase.co"
-export SUPABASE_KEY="OUR_SUPABASE_KEY"
+export SUPABASE_URL="https://brdvyxxaclhceucmcioq.supabase.co"
+export SUPABASE_KEY="SUPABASE_API_KEY"
 ```
 
-### Windows (PowerShell)
+Windows (PowerShell):
 
 ```powershell
-$env:SUPABASE_URL="https://OUR_PROJECT.supabase.co"
-$env:SUPABASE_KEY="OUR_SUPABASE_KEY"
+$env:SUPABASE_URL="https://brdvyxxaclhceucmcioq.supabase.co"
+$env:SUPABASE_KEY="SUPABASE_API_KEY"
 ```
 
-## Run the API File
+## 6) Quick Local Check
+
+Confirm your environment variables and package setup are working:
 
 ```bash
 python api/index.py
 ```
 
-## Every Time You Come Back to the Project
+If successful, you should see:
 
-1. Open terminal in this project folder.
-2. Activate `.venv` (using the command for your OS above).
-3. Run your commands (`python ...`, `pip ...`, etc.).
+```text
+Supabase client initialized successfully
+```
 
-## Why Not Install Packages Globally
+## 7) Daily Workflow (Every Time You Come Back)
 
-Global installs can cause version conflicts between projects.
-Using `.venv` avoids that and makes setup consistent for everyone.
+```bash
+cd Calendar
+source .venv/bin/activate
+```
 
-## Quick Troubleshooting
+Then run your normal commands (`python ...`, `pip ...`, `git ...`).
 
-- **`ModuleNotFoundError`**: your `.venv` is probably not active, or dependencies were not installed yet.
+## 8) Team Git Workflow
+
+### Start new work
+
+1. Make sure you are on `main`:
+
+```bash
+git checkout main
+```
+
+2. Pull latest changes:
+
+```bash
+git pull origin main
+```
+
+3. Create a new branch for your task:
+
+```bash
+git checkout -b feature/short-description
+```
+
+### Save your changes
+
+```bash
+git add .
+git commit -m "Short clear message about what changed"
+```
+
+### Push your branch
+
+```bash
+git push -u origin feature/short-description
+```
+
+Then open GitHub and create a Pull Request (PR).
+
+### Keep your branch updated while PR is open
+
+```bash
+git checkout main
+git pull origin main
+git checkout feature/short-description
+git merge main
+```
+
+If there are merge conflicts, resolve them, then commit and push again.
+
+## 9) Important Notes
+
+- Do not upload `.venv` to GitHub (ignored by `.gitignore`).
+- Do not commit secrets or API keys.
+- Keep commits small and focused so we can review easily.
