@@ -1,51 +1,44 @@
-import os
+from http.server import BaseHTTPRequestHandler
 import json
+import os
 from supabase import create_client
 
-# Initialize Supabase client
 supabase = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_KEY"]
 )
 
-print("Supabase client initialized successfully")
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"message": "Welcome to the API!"}')
 
-def handler(request):
-    # Vercel's runtime passes a dictionary-like request object
-    if request["httpMethod"] == "POST":
+    def do_POST(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
+        
         try:
-            data = request.get("body")
-            if data:
-                data = json.loads(data)
-                name = data.get("name")
-                email = data.get("email")
+            data = json.loads(body)
+            name = data.get("name")
+            email = data.get("email")
 
-                if not name or not email:
-                    return {
-                        "statusCode": 400,
-                        "body": '{"error": "Name and email are required"}'
-                    }
+            if not name or not email:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Name and email are required"}')
+                return
 
-                # Insert into Supabase
-                response = supabase.table("users").insert({"name": name, "email": email}).execute()
+            response = supabase.table("users").insert({"name": name, "email": email}).execute()
+            self.send_response(201)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"message": "User created successfully"}')
 
-                if response.status_code == 201:
-                    return {
-                        "statusCode": 201,
-                        "body": '{"message": "User created successfully"}'
-                    }
-                else:
-                    return {
-                        "statusCode": 500,
-                        "body": '{"error": "Failed to create user"}'
-                    }
         except Exception as e:
-            return {
-                "statusCode": 500,
-                "body": f'{{"error": "{str(e)}"}}'
-            }
-
-    return {
-        "statusCode": 200,
-        "body": '{"message": "Welcome to the API!"}'
-    }
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
