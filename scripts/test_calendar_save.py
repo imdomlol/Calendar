@@ -1,3 +1,6 @@
+#this testing file is completely AI generated, and is not meant to be a real test. It is meant to be a placeholder for future tests, and to demonstrate how to use the Supabase client. It may contain errors or incomplete code, and should not be used as a reference for real tests.
+# - dom
+
 import os
 import sys
 from datetime import datetime, timezone
