@@ -1,3 +1,5 @@
+from typing import Any
+
 class Events:
     def __init__(self, supabase_client):
         self.supabase_client = supabase_client
