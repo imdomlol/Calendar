@@ -29,22 +29,22 @@ class Event:
         return result
         
     def remove(self) -> Any:
-		if self.id is None:
-			raise ValueError("Event must be saved before removed.")
-			
-		result = self.supabase_client.table("events").delete().match({"id":self.id}).execute()
-		return result
-		
-	def edit(self, **kwargs) -> Any:
-		if self.id is None:
-			raise ValueError("Event must be saved before edited.")
-			
-		data = self.to_record()
-		for key, value in kwargs.items():
-			if key in data:
-				data[key] = value
-				
-		result = self.supabase_client.table("events").update(data).match({"id": self.id}).execute()
-		return result
+        if self.id is None:
+            raise ValueError("Event must be saved before removed.")
+
+        result = self.supabase_client.table("events").delete().match({"id":self.id}).execute()
+        return result
+
+    def edit(self, **kwargs) -> Any:
+        if self.id is None:
+            raise ValueError("Event must be saved before edited.")
+
+        data = self.to_record()
+        for key, value in kwargs.items():
+            if key in data:
+                data[key] = value
+
+        result = self.supabase_client.table("events").update(data).match({"id": self.id}).execute()
+        return result
 
     # id, calendar_ids, title, description, start_timestamp, end_timestamp, age_timestamp
