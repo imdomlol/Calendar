@@ -2,6 +2,13 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from supabase import create_client
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def welcome():
+    return {"message": "Welcome to the API!"}
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],
