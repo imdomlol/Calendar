@@ -13,25 +13,21 @@ class Calendar:
         Remove the calendar (+ Events, member_ids, dates) from the database. Opposite of the save function.
 
 '''
+
 from typing import Any
 from utils.supabase_client import get_supabase_client
 
 class Calendar:
     def __init__(self, name: str, owner_id: str) -> None:
-        self.id = None # Will be set when the calendar is saved to the database. The calendar to save, edit, remove.
-        self.name = name # 
-        self.owner_id = owner_id # 
-        self.member_ids: list[str] = [owner_id] # 
-        self.events: list[str] = [] # 
+        self.id = None # Will be set when the calendar is saved to the database. The calendar to save, edit, remove
+        self.name = name # The name of the calendar, e.g. "Work Calendar", "Personal Calendar", etc
+        self.owner_id = owner_id # The ID of the user who owns the calendar
+        self.member_ids: list[str] = [owner_id] # A list of IDs of users who have access to the calendar
+        self.events: list[str] = [] # A list of IDs of events associated with the calendar
         self.age_timestamp = None # Will be set when the calendar is saved to the database
 
     def add_event(self, event_id: str) -> None:
-        '''
-        self = 
-        .events = 
-        .append(event_id) = 
-        '''
-        self.events.append(event_id) # 
+        self.events.append(event_id) # Add an event ID to the calendar's list of events
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -44,7 +40,7 @@ class Calendar:
         }
     
     def save(self) -> Any: 
-        supabase = get_supabase_client() # Connect to supabase client.
+        supabase = get_supabase_client()
         '''
         supabase = Link to the supabase client.
         .table("calendars") = From the database, select 'calendars' to target for insertion.
@@ -55,7 +51,7 @@ class Calendar:
         return supabase.table("calendars").insert(self.to_record()).execute() # 
 
     def remove_calendar(self):
-        supabase = get_supabase_client() # Connect to supabase; Use in removing the calendar from the cilent.
+        supabase = get_supabase_client()
         '''
         supabase = Link to the supabase client.
         .table("calendars") = From the database, select 'calendars' as target for removal.
@@ -63,26 +59,4 @@ class Calendar:
         .eq("id", self.id) = "Equals", filter out so the correct calendar id is matched.
         .execute() = Perform the actions above, otherwise the line would just be saved.
         '''
-        return supabase.table("calendars").delete().eq("id", self.id).execute() # 
-
-
-
-
-
-
-
-
-
-
-'''
-STORAGE
-    #import datetime # 
-    #import time # 
-
-    #self.events.calendar_id
-
-    # Find members, events, age, if calendar contains such.
-    #self.member_ids.delete() if "id" == self.id
-
-    calendar_id = self.id # Target calendar.
-'''
+        return supabase.table("calendars").delete().eq("id", self.id).execute()
