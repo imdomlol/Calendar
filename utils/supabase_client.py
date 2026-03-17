@@ -1,5 +1,4 @@
-import os
-import sys
+import os, sys
 from importlib import import_module
 
 

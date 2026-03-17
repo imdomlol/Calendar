@@ -3,7 +3,6 @@
 
 import os
 import sys
-from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from uuid import uuid4
@@ -18,7 +17,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-from models.calendar import Calendar
+from models.event import Event
+from utils.supabase_client import get_supabase_client
 
 
 def check_env() -> int:
@@ -44,21 +44,21 @@ def main() -> int:
     if "--check-env" in sys.argv:
         return check_env()
 
-    calendar = Calendar(
-        name="Integration Test Calendar",
-        owner_id=str(uuid4()),
+    event = Event(
+        calendar_ids=[str(uuid4())],  # Use a random calendar ID for testing; adjust as needed
+        title="Integration Test Event",
+        description="This event was created by an integration test script.",
+        start_timestamp="2026-01-01T12:00:00Z",
+        end_timestamp="2026-01-01T13:00:00Z",
+        supabase_client=get_supabase_client(),
     )
 
-    calendar.add_event(str(uuid4()))
-
     # Keep the test compatible even if Calendar.save() does not auto-populate fields yet.
-    if calendar.id is None:
-        calendar.id = str(uuid4())
-    if calendar.age_timestamp is None:
-        calendar.age_timestamp = datetime.now(timezone.utc).isoformat()
+    if event.id is None:
+        event.id = str(uuid4())
 
     try:
-        insert_result = calendar.save()
+        insert_result = event.save()
     except RuntimeError as exc:
         message = str(exc)
         print(message)
@@ -72,31 +72,28 @@ def main() -> int:
         print("Insert failed: no data returned")
         return 1
 
-    print("Inserted calendar id:", calendar.id)
-    print("Generated age_timestamp:", calendar.age_timestamp)
-
-    from utils.supabase_client import get_supabase_client
+    print("Inserted event id:", event.id)
 
     supabase = get_supabase_client()
     fetched = (
-        supabase.table("calendars")
-        .select("id, name, owner_id, member_ids, events, age_timestamp")
-        .eq("id", calendar.id)
+        supabase.table("events")
+        .select("id, title, description, start_timestamp, end_timestamp, age_timestamp")
+        .eq("id", event.id)
         .single()
         .execute()
     )
 
     if not fetched.data:
-        print("Read-back failed: could not find inserted calendar")
+        print("Read-back failed: could not find inserted event")
         return 1
 
     print("Read-back row:", fetched.data)
 
     if os.getenv("CLEANUP_TEST_ROW") == "1":
-        supabase.table("calendars").delete().eq("id", calendar.id).execute()
+        supabase.table("events").delete().eq("id", event.id).execute()
         print("Cleanup complete: deleted test row")
 
-    print("Calendar save test passed")
+    print("Event save test passed")
     return 0
 
 

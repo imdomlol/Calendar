@@ -17,12 +17,7 @@ from typing import Any
 from utils.supabase_client import get_supabase_client
 
 class Calendar:
-    def __init__(
-        self,
-        name: str,
-        owner_id: str,
-    ) -> None:
-        
+    def __init__(self, name: str, owner_id: str) -> None:
         self.id = None # Will be set when the calendar is saved to the database. The calendar to save, edit, remove.
         self.name = name # 
         self.owner_id = owner_id # 
