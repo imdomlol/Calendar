@@ -6,17 +6,18 @@ class Calendar:
     add_event:
         x
     to_record:
-        x
+        Dictionary: Save a data records of the user, and related credentials.
     save:
-        x
+        Save the calendar to the database. 
     remove_calendar:
-        Remove the called-upon calendar (+ Events, member_ids, dates)
+        Remove the calendar (+ Events, member_ids, dates) from the database. Opposite of the save function.
+
 '''
 from typing import Any
 from utils.supabase_client import get_supabase_client
 
-class Calendar: # 
-    def __init__( # 
+class Calendar:
+    def __init__(
         self,
         name: str,
         owner_id: str,
@@ -29,15 +30,15 @@ class Calendar: #
         self.events: list[str] = [] # 
         self.age_timestamp = None # Will be set when the calendar is saved to the database
 
-    def add_event(self, event_id: str) -> None: # 
+    def add_event(self, event_id: str) -> None:
         '''
         self = 
-        events = 
-        append(event_id) = 
+        .events = 
+        .append(event_id) = 
         '''
         self.events.append(event_id) # 
 
-    def to_record(self) -> dict[str, Any]: # Dictionary: Save a data records of the user, and related credentials.
+    def to_record(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -47,7 +48,7 @@ class Calendar: #
             "age_timestamp": self.age_timestamp,
         }
     
-    def save(self) -> Any: # Save the calendar to the database. 
+    def save(self) -> Any: 
         supabase = get_supabase_client() # Connect to supabase client.
         '''
         supabase = Link to the supabase client.
@@ -58,7 +59,7 @@ class Calendar: #
         '''
         return supabase.table("calendars").insert(self.to_record()).execute() # 
 
-    def remove_calendar(self): # Removes the calendar from the database. Opposite of the save function above.
+    def remove_calendar(self):
         supabase = get_supabase_client() # Connect to supabase; Use in removing the calendar from the cilent.
         '''
         supabase = Link to the supabase client.

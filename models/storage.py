@@ -41,3 +41,33 @@ class Trash_can(): # Stores removed calendars, and other objects for recovery. 3
         pass
 
 
+
+
+
+import datetime # Module used for handling date and time operations.
+import time
+
+# Overview
+'''
+Functions in external.py:
+
+
+'''
+
+
+
+
+# Link Calendar [ Function ]
+# TO DO
+'''
+Create a function in the External Calendar class that adds a new external calendar connection to the database.
+
+Connect / link calendar to database.
+    User called
+'''
+
+# 
+def linkCalendar():
+    pass
+
+
