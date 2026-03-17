@@ -2,7 +2,13 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from supabase import create_client
-from flask import Flask
+from flask import Flask, request
+from flask_cors import CORS
+
+supabase = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_KEY"]
+)
 
 app = Flask(__name__)
 
@@ -10,10 +16,47 @@ app = Flask(__name__)
 def welcome():
     return {"message": "Welcome to the API!"}
 
-supabase = create_client(
-    os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_KEY"]
-)
+# Configure CORS to allow frontend
+CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
+
+# Logging
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.before_request
+def log_request():
+    logger.info(f"{request.method} {request.path}")
+
+@app.after_request
+def log_response(response):
+    logger.info(f"Response: {response.status_code}")
+    return response
+
+# Error handlers
+@app.errorhandler(400)
+def bad_request(e):
+    logger.error(f"Bad request: {str(e)}")
+    return {"error": str(e)}, 400
+
+@app.errorhandler(401)
+def unauthorized(e):
+    logger.error(f"Unauthorized: {str(e)}")
+    return {"error": "Unauthorized"}, 401
+
+@app.errorhandler(404)
+def not_found(e):
+    logger.error(f"Not found: {str(e)}")
+    return {"error": "Not found"}, 404
+
+@app.errorhandler(500)
+def server_error(e):
+    logger.error(f"Internal server error: {str(e)}")
+    return {"error": "Internal server error"}, 500
+
+@app.route("/")
+def index():
+    return {"message": "Welcome to the API!"}
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
