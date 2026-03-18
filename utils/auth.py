@@ -1,23 +1,49 @@
-from functools import wraps
-from flask import request, abort, g
+import json
 import os
-import jwt
+from functools import wraps
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
+from flask import abort, g, request
 
 def require_auth(f):
-    @wraps(f) # Preserve function metadata
+    @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get("Authorization", "").removeprefix("Bearer ")
+        # grab the token from the header.
+        token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if not token:
             abort(401)
+
+        # supabase project URL + key are required to validate
+        supabase_url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+        supabase_key = os.environ.get("SUPABASE_KEY") or ""
+        if not supabase_url or not supabase_key:
+            abort(401)
+
+        # ask supabase who this token belongs to
+        req = Request(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {token}",
+            },
+            method="GET",
+        )
+
         try:
-            # Decode the JWT token to get user info
-            payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], audience="authenticated")
-            g.user = payload  # current session available everywhere
-        except jwt.ExpiredSignatureError:
+            with urlopen(req, timeout=15) as response:
+                raw = response.read().decode("utf-8")
+                user = json.loads(raw or "{}")
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
             abort(401)
-        except jwt.InvalidTokenError:
+
+        # if supabase does not return a real user id, treat it as unauthorized
+        if not isinstance(user, dict) or not user.get("id"):
             abort(401)
+
+        user.setdefault("sub", user["id"])
+        g.user = user
+
         return f(*args, **kwargs)
+
     return decorated
