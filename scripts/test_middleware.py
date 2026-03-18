@@ -44,6 +44,9 @@ def auth_request(path: str, payload: dict) -> tuple[int, dict]:
     base_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
     api_key = os.getenv("SUPABASE_KEY") or ""
 
+    if not base_url or not api_key:
+        raise RuntimeError("Set SUPABASE_URL and SUPABASE_KEY before running this script.")
+
     url = f"{base_url}/auth/v1/{path.lstrip('/')}"
     headers = {
         "apikey": api_key,
