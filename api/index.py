@@ -2,11 +2,14 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from supabase import create_client
+from auth_routes import auth_bp
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_KEY"]
 )
+
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
