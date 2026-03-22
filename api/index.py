@@ -2,8 +2,9 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from supabase import create_client
-from flask import Flask, request
+from flask import Flask, g, request
 from flask_cors import CORS
+from utils.auth import require_auth
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],
@@ -57,6 +58,24 @@ def server_error(e):
 @app.route("/")
 def index():
     return {"message": "Welcome to the API!"}
+
+
+@app.route("/me", methods=["GET"])
+@require_auth
+def me():
+    user = getattr(g, "user", {})
+    return {
+        "success": True,
+        "user": {
+            "id": user.get("id") or user.get("sub"),
+            "email": user.get("email"),
+            "role": user.get("role"),
+            "last_sign_in_at": user.get("last_sign_in_at"),
+        },
+        "session": {
+            "authenticated": True,
+        },
+    }, 200
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):

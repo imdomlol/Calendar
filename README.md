@@ -7,7 +7,7 @@ Calendar website for 362.
 - Git installed
 - Python 3.12+
 
-## 2) Get the Project on Your Computer
+## 2) Get the psroject on Your Computer
 
 ### Option A: You have write access to this repository
 
@@ -110,16 +110,7 @@ If successful, you should see:
 Supabase client initialized successfully
 ```
 
-## 7) Daily Workflow (Every Time You Come Back)
-
-```bash
-cd Calendar
-source .venv/bin/activate
-```
-
-Then run your normal commands (`python ...`, `pip ...`, `git ...`).
-
-## 8) Team Git Workflow
+## 7) Team Git Workflow
 
 ### Core Git concepts (quick guide)
 
@@ -225,7 +216,7 @@ If there are merge conflicts, resolve them, then commit and push again.
 5. Create PR from the Pull Requests view.
 6. After PR merge, switch to `main` and click `Sync Changes` (or pull).
 
-## 9) Important Notes
+## 8) Important Notes
 
 - Do not upload `.venv` to GitHub (ignored by `.gitignore`).
 - Do not commit secrets or API keys.
