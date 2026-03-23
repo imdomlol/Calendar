@@ -9,6 +9,7 @@ from models.calendar import Calendar
 from models.event import Event
 from models.external import External
 from flask_cors import CORS
+from utils.auth import require_auth
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],
@@ -219,6 +220,24 @@ def delete_external(external_id):
     supabase.table("externals").delete().eq("id", external_id).execute()
     return "", 204
 
+
+
+@app.route("/me", methods=["GET"])
+@require_auth
+def me():
+    user = getattr(g, "user", {})
+    return {
+        "success": True,
+        "user": {
+            "id": user.get("id") or user.get("sub"),
+            "email": user.get("email"),
+            "role": user.get("role"),
+            "last_sign_in_at": user.get("last_sign_in_at"),
+        },
+        "session": {
+            "authenticated": True,
+        },
+    }, 200
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):

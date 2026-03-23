@@ -1,9 +1,10 @@
 from typing import Any
 
 class Event:
-    def __init__(self, title: str, supabase_client: Any, calendar_ids: list, description: str = None, start_timestamp: str = None, end_timestamp: str = None,) -> None:
+    def __init__(self, title: str, supabase_client: Any, calendar_ids: list, owner_id: str, description: str = None, start_timestamp: str = None, end_timestamp: str = None,) -> None:
         self.id = None  # Will be set when the event is saved to the database
         self.supabase_client = supabase_client
+        self.owner_id = owner_id
         self.title = title
         self.calendar_ids = calendar_ids
         self.description = description
@@ -14,6 +15,7 @@ class Event:
     def to_record(self) -> dict:
         return {
             "id": self.id,
+            "owner_id": self.owner_id, 
             "calendar_ids": self.calendar_ids,
             "title": self.title,
             "description": self.description,
