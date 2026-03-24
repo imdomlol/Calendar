@@ -56,7 +56,7 @@ def main() -> int:
 
     fetched = (
         supabase.table("events")
-        .select("id, calendar_ids, title, description, start_timestamp, end_timestamp")
+        .select("id, calendar_ids, title, description, start_timestamp, end_timestamp, owner_id")
         .limit(1)
         .execute()
     )
@@ -74,7 +74,9 @@ def main() -> int:
         start_timestamp=row.get("start_timestamp"),
         end_timestamp=row.get("end_timestamp"),
         supabase_client=supabase,
+        owner_id=row.get("owner_id") or "unknown",
     )
+
     event.id = row.get("id")
 
     if event.id is None:
