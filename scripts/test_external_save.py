@@ -63,6 +63,7 @@ def main() -> int:
         user_id=f"{uuid4()}",
         access_token=f"{uuid4()}",
         refresh_token=f"-{uuid4()}",
+        owner_id=f"{uuid4()}",
     )
 
     if external.id is None:
@@ -78,7 +79,7 @@ def main() -> int:
 
     fetched = (
         supabase.table("externals")
-        .select("id, url, provider, user_id, access_token, refresh_token")
+        .select("id, url, provider, user_id, access_token, refresh_token, owner_id")
         .eq("id", external.id)
         .single()
         .execute()
