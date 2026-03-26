@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 from supabase import create_client
+from auth_routes import auth_bp
 from flask import Flask, request, g, abort
 from utils.auth import require_auth
 from utils.supabase_client import get_supabase_client
@@ -15,6 +16,8 @@ supabase = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_KEY"]
 )
+
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
 app = Flask(__name__)
 
