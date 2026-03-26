@@ -10,7 +10,7 @@ def register():
         data = request.json
         email = data.get("email")
         password = data.get("password")
-        name = data.get("name")
+        display_name = data.get("display_name")
 
         if not email or not password:
             return {"error": "Email and password required"}, 400
@@ -23,8 +23,7 @@ def register():
         if result.user:
             supabase.table("users").insert({
                 "id": result.user.id,
-                "name": name,
-                "email": email
+                "display_name": display_name
             }).execute()
 
         return {

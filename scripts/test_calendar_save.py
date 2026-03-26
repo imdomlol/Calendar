@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:
     load_dotenv = import_module("dotenv").load_dotenv
-    load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
+    load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=True)
 except ModuleNotFoundError:
     pass
 
