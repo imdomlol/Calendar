@@ -1,5 +1,5 @@
 from flask import Blueprint, request
-from supabase_client import get_supabase_client
+from utils.supabase_client import get_supabase_client
 
 auth_bp = Blueprint("auth", __name__)
 supabase = get_supabase_client()
