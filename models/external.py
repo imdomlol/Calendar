@@ -7,6 +7,7 @@ class External:
     def __init__(
         self,
         id: str | None,
+        owner_id: str,
         url: str,
         provider: str,
         supabase_client: Any,
@@ -15,6 +16,7 @@ class External:
         refresh_token: str | None = None,
     ) -> None:
         self.id = id
+        self.owner_id = owner_id
         self.url = url
         self.provider = provider
         self.user_id = user_id
@@ -25,6 +27,7 @@ class External:
     def to_record(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "owner_id": self.owner_id,
             "url": self.url,
             "provider": self.provider,
             "user_id": self.user_id,

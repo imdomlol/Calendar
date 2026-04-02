@@ -18,7 +18,7 @@ def require_auth(f):
         supabase_url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
         supabase_key = os.environ.get("SUPABASE_KEY") or ""
         if not supabase_url or not supabase_key:
-            abort(401)
+            abort(500)
 
         # ask supabase who this token belongs to
         req = Request(
@@ -32,6 +32,9 @@ def require_auth(f):
 
         try:
             with urlopen(req, timeout=15) as response:
+                status = getattr(response, "status", response.getcode())
+                if status < 200 or status >= 300:
+                    abort(401)
                 raw = response.read().decode("utf-8")
                 user = json.loads(raw or "{}")
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):

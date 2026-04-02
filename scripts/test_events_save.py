@@ -51,6 +51,7 @@ def main() -> int:
         start_timestamp="2026-01-01T12:00:00Z",
         end_timestamp="2026-01-01T13:00:00Z",
         supabase_client=get_supabase_client(),
+        owner_id=str(uuid4()),  # Use a random owner ID for testing; adjust as needed
     )
 
     # Keep the test compatible even if Calendar.save() does not auto-populate fields yet.
@@ -77,7 +78,7 @@ def main() -> int:
     supabase = get_supabase_client()
     fetched = (
         supabase.table("events")
-        .select("id, title, description, start_timestamp, end_timestamp, age_timestamp")
+        .select("id, calendar_ids, title, description, start_timestamp, end_timestamp, owner_id")
         .eq("id", event.id)
         .single()
         .execute()
