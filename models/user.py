@@ -27,7 +27,6 @@ class User:
         DECRIPTION
 '''
 
-
 # Imports
 from typing import Any # 
 from utils.supabase_client import get_supabase_client # 
