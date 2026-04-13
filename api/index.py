@@ -2,7 +2,7 @@ import os
 from supabase import create_client
 from api.auth_routes import auth_bp
 from api.ui_routes import ui_bp
-from flask import Flask, request, g, abort
+from flask import Flask, request, g, abort, redirect, url_for
 from utils.auth import require_auth
 from utils.supabase_client import get_supabase_client
 from models.calendar import Calendar
@@ -23,7 +23,7 @@ app.register_blueprint(ui_bp, url_prefix="/ui")
 
 @app.route("/")
 def welcome():
-    return {"message": "Welcome to the API!"}
+    return redirect(url_for("ui.home"))
 
 # Configure CORS to allow frontend
 CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
