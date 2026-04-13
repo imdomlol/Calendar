@@ -3,6 +3,7 @@ import json
 import os
 from supabase import create_client
 from auth_routes import auth_bp
+from ui_routes import ui_bp
 from flask import Flask, request, g, abort
 from utils.auth import require_auth
 from utils.supabase_client import get_supabase_client
@@ -20,6 +21,7 @@ supabase = create_client(
 )
 
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(ui_bp, url_prefix="/ui")
 
 @app.route("/")
 def welcome():

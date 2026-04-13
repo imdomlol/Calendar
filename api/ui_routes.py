@@ -1,0 +1,447 @@
+from flask import Blueprint, render_template_string, url_for
+
+ui_bp = Blueprint("ui", __name__)
+
+calendars = [
+    {"id": 1, "name": "Work Calendar", "owner": "Alice"},
+    {"id": 2, "name": "Personal Calendar", "owner": "Alice"},
+]
+
+events = [
+    {"id": 1, "calendar_id": 1, "title": "Team Meeting", "date": "2026-04-15", "time": "10:00"},
+    {"id": 2, "calendar_id": 2, "title": "Gym Session", "date": "2026-04-16", "time": "18:00"},
+]
+
+friends = ["Jamie", "Morgan", "Taylor"]
+externals = ["Google Calendar", "Outlook Calendar"]
+logs = [
+    "[INFO] User Alice synced Google Calendar",
+    "[WARN] Failed login attempt detected",
+    "[INFO] Admin sent system-wide notification",
+]
+
+BASE_HTML = """
+<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"UTF-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+  <title>{{ title }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+    .topbar {
+      background: #1d4ed8;
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .brand {
+      font-size: 22px;
+      font-weight: bold;
+    }
+    .top-links a {
+      color: white;
+      text-decoration: none;
+      margin-left: 10px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.15);
+      padding: 8px 12px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: calc(100vh - 80px);
+    }
+    .sidebar {
+      background: #ffffff;
+      border-right: 1px solid #e5e7eb;
+      padding: 20px;
+    }
+    .sidebar h3 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+    .sidebar a {
+      display: block;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      text-decoration: none;
+      color: #1f2937;
+      border-radius: 8px;
+    }
+    .sidebar a:hover {
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .content {
+      padding: 24px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #dbeafe, #eff6ff);
+      padding: 24px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      border: 1px solid #bfdbfe;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 18px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+    }
+    .card h4 {
+      margin: 0 0 10px 0;
+    }
+    .card p, .card li {
+      color: #4b5563;
+      font-size: 14px;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      margin-bottom: 10px;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 10px;
+      text-decoration: none;
+      background: #1d4ed8;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    th { background: #eff6ff; }
+    .danger { background: #dc2626; }
+    .warning { background: #f59e0b; }
+    .muted { color: #6b7280; }
+    .empty {
+      padding: 30px;
+      text-align: center;
+      background: white;
+      border: 1px dashed #cbd5e1;
+      border-radius: 16px;
+    }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid #e5e7eb; }
+      .content { padding: 18px; }
+      .top-links a { margin-left: 6px; margin-top: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class=\"topbar\">
+    <div class=\"brand\">Calendar System</div>
+    <div class=\"top-links\">
+      <a href=\"{{ url_for('ui.home') }}\">Guest</a>
+      <a href=\"{{ url_for('ui.dashboard', role='user') }}\">User</a>
+      <a href=\"{{ url_for('ui.dashboard', role='admin') }}\">Admin</a>
+    </div>
+  </div>
+
+  <div class=\"layout\">
+    <aside class=\"sidebar\">
+      <h3>{{ role|title }} Menu</h3>
+      {% for item in nav %}
+        <a href=\"{{ item.href }}\">{{ item.label }}</a>
+      {% endfor %}
+    </aside>
+
+    <main class=\"content\">
+      {{ body|safe }}
+    </main>
+  </div>
+</body>
+</html>
+"""
+
+
+def render_page(title, role, nav, body):
+    return render_template_string(BASE_HTML, title=title, role=role, nav=nav, body=body)
+
+
+def guest_nav():
+    return [
+        {"label": "View Calendars", "href": url_for("ui.view_calendars")},
+        {"label": "View Events", "href": url_for("ui.view_events")},
+    ]
+
+
+def user_nav():
+    return [
+        {"label": "Dashboard", "href": url_for("ui.dashboard", role="user")},
+        {"label": "Manage Externals", "href": url_for("ui.manage_externals")},
+        {"label": "Manage Calendars", "href": url_for("ui.manage_calendars")},
+        {"label": "Manage Friends", "href": url_for("ui.manage_friends")},
+        {"label": "Remove Account", "href": url_for("ui.remove_account")},
+    ]
+
+
+def admin_nav():
+    return [
+        {"label": "Dashboard", "href": url_for("ui.dashboard", role="admin")},
+        {"label": "System Logs", "href": url_for("ui.system_logs")},
+        {"label": "Notifications", "href": url_for("ui.send_notification")},
+        {"label": "Suspend User", "href": url_for("ui.suspend_user")},
+        {"label": "Unlink External Calendars", "href": url_for("ui.admin_unlink")},
+    ]
+
+
+@ui_bp.route("/")
+def home():
+    body = """
+    <div class='hero'>
+      <h1>Welcome to the Calendar System</h1>
+    </div>
+
+    <div class='grid'>
+      <div class='card'>
+        <div class='pill'>Guest</div>
+        <h4>Public access</h4>
+        <p>Guests can view calendars and events if they exist.</p>
+        <a class='btn' href='/ui/calendars'>Open guest view</a>
+      </div>
+      <div class='card'>
+        <div class='pill'>User</div>
+        <h4>Manage account data</h4>
+        <p>Users can manage calendars, events, friends, external syncs, and account settings.</p>
+        <a class='btn' href='/ui/dashboard/user'>Open user dashboard</a>
+      </div>
+      <div class='card'>
+        <div class='pill'>Admin</div>
+        <h4>System tools</h4>
+        <p>Admins can view logs, suspend users, send notifications, and manage external links.</p>
+        <a class='btn' href='/ui/dashboard/admin'>Open admin dashboard</a>
+      </div>
+    </div>
+    """
+    return render_page("Calendar Info System", "guest", guest_nav(), body)
+
+
+@ui_bp.route("/dashboard/<role>")
+def dashboard(role):
+    if role == "admin":
+        nav = admin_nav()
+        body = """
+        <div class='hero'>
+          <h1>Admin Dashboard</h1>
+          <p class='muted'>Manage system-wide actions from one place.</p>
+        </div>
+        <div class='grid'>
+          <div class='card'><h4>View system logs</h4><p>Inspect recent platform activity.</p><a class='btn' href='/ui/admin/logs'>Open</a></div>
+          <div class='card'><h4>Send notifications</h4><p>Push platform updates to all users.</p><a class='btn warning' href='/ui/admin/notifications'>Open</a></div>
+          <div class='card'><h4>Suspend user account</h4><p>Temporarily disable access.</p><a class='btn danger' href='/ui/admin/suspend'>Open</a></div>
+          <div class='card'><h4>Unlink all external calendars</h4><p>Break linked external integrations.</p><a class='btn' href='/ui/admin/unlink'>Open</a></div>
+        </div>
+        """
+        return render_page("Admin Dashboard", "admin", nav, body)
+
+    nav = user_nav()
+    body = """
+    <div class='hero'>
+      <h1>User Dashboard</h1>
+      <p class='muted'>Manage your calendars, friends, external calendars, and events.</p>
+    </div>
+    <div class='grid'>
+      <div class='card'><h4>Manage Externals</h4><p>Connect, disconnect, or sync Google/Outlook calendars.</p><a class='btn' href='/ui/user/externals'>Open</a></div>
+      <div class='card'><h4>Manage Calendars</h4><p>Create calendars and manage events.</p><a class='btn' href='/ui/user/calendars'>Open</a></div>
+      <div class='card'><h4>Manage Friends</h4><p>Add and remove friends from your list.</p><a class='btn' href='/ui/user/friends'>Open</a></div>
+      <div class='card'><h4>Remove Account</h4><p>Delete your user account.</p><a class='btn danger' href='/ui/user/remove-account'>Open</a></div>
+    </div>
+    """
+    return render_page("User Dashboard", "user", nav, body)
+
+
+@ui_bp.route("/calendars")
+def view_calendars():
+    if not calendars:
+        body = "<div class='empty'><h3>No calendars found</h3><p>Nothing to display right now.</p></div>"
+    else:
+        rows = "".join(
+            f"<tr><td>{c['id']}</td><td>{c['name']}</td><td>{c['owner']}</td></tr>" for c in calendars
+        )
+        body = f"""
+        <div class='hero'><h1>View Calendars</h1><p class='muted'>Guest access to available calendars.</p></div>
+        <table>
+          <tr><th>ID</th><th>Calendar Name</th><th>Owner</th></tr>
+          {rows}
+        </table>
+        """
+    return render_page("View Calendars", "guest", guest_nav(), body)
+
+
+@ui_bp.route("/events")
+def view_events():
+    if not events:
+        body = "<div class='empty'><h3>No events found</h3><p>Nothing to display right now.</p></div>"
+    else:
+        rows = "".join(
+            f"<tr><td>{e['title']}</td><td>{e['date']}</td><td>{e['time']}</td></tr>" for e in events
+        )
+        body = f"""
+        <div class='hero'><h1>View Events</h1><p class='muted'>Guest event list.</p></div>
+        <table>
+          <tr><th>Title</th><th>Date</th><th>Time</th></tr>
+          {rows}
+        </table>
+        """
+    return render_page("View Events", "guest", guest_nav(), body)
+
+
+@ui_bp.route("/user/externals")
+def manage_externals():
+    items = "".join(f"<li>{name}</li>" for name in externals)
+    body = f"""
+    <div class='hero'><h1>Manage Externals</h1><p class='muted'>Connect, disconnect, sync now, or toggle auto-sync.</p></div>
+    <div class='grid'>
+      <div class='card'><h4>Connected providers</h4><ul>{items}</ul></div>
+      <div class='card'><h4>Actions</h4><p>Connect external calendar</p><p>Disconnect external calendar</p><p>Sync now</p><p>Enable/Disable auto sync</p></div>
+    </div>
+    """
+    return render_page("Manage Externals", "user", user_nav(), body)
+
+
+@ui_bp.route("/user/calendars")
+def manage_calendars():
+    cards = []
+    for cal in calendars:
+        cal_events = [e for e in events if e["calendar_id"] == cal["id"]]
+        event_list = "".join(f"<li>{e['title']} - {e['date']} {e['time']}</li>" for e in cal_events) or "<li>No events yet</li>"
+        cards.append(f"""
+          <div class='card'>
+            <div class='pill'>Calendar #{cal['id']}</div>
+            <h4>{cal['name']}</h4>
+            <p>Owner: {cal['owner']}</p>
+            <p><strong>Actions:</strong> Create event, edit event, delete event, manage members, remove calendar</p>
+            <ul>{event_list}</ul>
+          </div>
+        """)
+    body = """
+    <div class='hero'>
+      <h1>Manage Calendars</h1>
+      <p class='muted'>Create calendars, manage members, and manage events.</p>
+    </div>
+    <div class='card' style='margin-bottom:16px;'>
+      <h4>Available actions</h4>
+      <p>Create Calendar • Add Member • Remove Member • Manage Events • Remove Calendar</p>
+    </div>
+    <div class='grid'>
+    """ + "".join(cards) + "</div>"
+    return render_page("Manage Calendars", "user", user_nav(), body)
+
+
+@ui_bp.route("/user/friends")
+def manage_friends():
+    names = "".join(f"<li>{friend}</li>" for friend in friends)
+    body = f"""
+    <div class='hero'><h1>Manage Friends</h1><p class='muted'>Add and remove friends.</p></div>
+    <div class='grid'>
+      <div class='card'><h4>Friends List</h4><ul>{names}</ul></div>
+      <div class='card'><h4>Actions</h4><p>Add Friend</p><p>Remove Friend</p></div>
+    </div>
+    """
+    return render_page("Manage Friends", "user", user_nav(), body)
+
+
+@ui_bp.route("/user/remove-account")
+def remove_account():
+    body = """
+    <div class='hero'><h1>Remove Account</h1><p class='muted'>This is a placeholder confirmation screen.</p></div>
+    <div class='card'>
+      <h4>Danger Zone</h4>
+      <p>This action would permanently remove the user's account.</p>
+      <a class='btn danger' href='/ui/dashboard/user'>Confirm removal</a>
+    </div>
+    """
+    return render_page("Remove Account", "user", user_nav(), body)
+
+
+@ui_bp.route("/admin/logs")
+def system_logs():
+    lines = "".join(f"<tr><td>{i + 1}</td><td>{line}</td></tr>" for i, line in enumerate(logs))
+    body = f"""
+    <div class='hero'><h1>System Logs</h1><p class='muted'>Admin-only activity log view.</p></div>
+    <table>
+      <tr><th>#</th><th>Log Entry</th></tr>
+      {lines}
+    </table>
+    """
+    return render_page("System Logs", "admin", admin_nav(), body)
+
+
+@ui_bp.route("/admin/notifications")
+def send_notification():
+    body = """
+    <div class='hero'><h1>System-Wide Notifications</h1><p class='muted'>Draft and send a notification to every user.</p></div>
+    <div class='card'>
+      <h4>Notification Composer</h4>
+      <p>Title: Platform Maintenance</p>
+      <p>Message: The system will be unavailable tonight from 11PM to 12AM.</p>
+      <a class='btn warning' href='/ui/dashboard/admin'>Send Notification</a>
+    </div>
+    """
+    return render_page("Notifications", "admin", admin_nav(), body)
+
+
+@ui_bp.route("/admin/suspend")
+def suspend_user():
+    body = """
+    <div class='hero'><h1>Suspend User Account</h1><p class='muted'>Admin control panel for account suspension.</p></div>
+    <div class='card'>
+      <h4>Suspend user</h4>
+      <p>User: alice@example.com</p>
+      <p>Reason: Policy violation / temporary review</p>
+      <a class='btn danger' href='/ui/dashboard/admin'>Suspend Account</a>
+    </div>
+    """
+    return render_page("Suspend User", "admin", admin_nav(), body)
+
+
+@ui_bp.route("/admin/unlink")
+def admin_unlink():
+    providers = "".join(f"<li>{name}</li>" for name in externals)
+    body = f"""
+    <div class='hero'><h1>Unlink External Calendars</h1><p class='muted'>Admin action for external calendar disconnection.</p></div>
+    <div class='card'>
+      <h4>Linked providers</h4>
+      <ul>{providers}</ul>
+      <a class='btn danger' href='/ui/dashboard/admin'>Unlink All</a>
+    </div>
+    """
+    return render_page("Unlink External Calendars", "admin", admin_nav(), body)
