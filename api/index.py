@@ -1,9 +1,7 @@
-from http.server import BaseHTTPRequestHandler
-import json
 import os
 from supabase import create_client
-from auth_routes import auth_bp
-from ui_routes import ui_bp
+from api.auth_routes import auth_bp
+from api.ui_routes import ui_bp
 from flask import Flask, request, g, abort
 from utils.auth import require_auth
 from utils.supabase_client import get_supabase_client
@@ -243,38 +241,3 @@ def me():
             "authenticated": True,
         },
     }, 200
-
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"message": "Welcome to the API!"}')
-
-    def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(body)
-            name = data.get("name")
-            email = data.get("email")
-
-            if not name or not email:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"error": "Name and email are required"}')
-                return
-
-            response = supabase.table("users").insert({"name": name, "email": email}).execute()
-            self.send_response(201)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"message": "User created successfully"}')
-
-        except Exception as e:
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
