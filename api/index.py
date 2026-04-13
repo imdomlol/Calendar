@@ -12,14 +12,14 @@ from models.external import External
 from flask_cors import CORS
 from utils.auth import require_auth
 
+app = Flask(__name__)
+
 supabase = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_KEY"]
 )
 
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
-
-app = Flask(__name__)
 
 @app.route("/")
 def welcome():
