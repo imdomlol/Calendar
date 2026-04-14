@@ -204,42 +204,42 @@ BASE_HTML = """
 
 
 def render_page(title, role, nav, body):
-  return render_template_string(
-    BASE_HTML,
-    title=title,
-    role=role,
-    nav=nav,
-    body=body,
-    ui_user=_ui_user(),
-  )
+    return render_template_string(
+        BASE_HTML,
+        title=title,
+        role=role,
+        nav=nav,
+        body=body,
+        ui_user=_ui_user(),
+    )
 
 
 def _ui_user():
-  user = session.get("ui_user")
-  if isinstance(user, dict) and user.get("id"):
-    return user
-  return None
+    user = session.get("ui_user")
+    if isinstance(user, dict) and user.get("id"):
+        return user
+    return None
 
 
 def _get_ui_supabase_client():
-  user = _ui_user() or {}
-  access_token = user.get("access_token")
-  if not access_token:
-    raise RuntimeError("Login session expired. Please log in again.")
+    user = _ui_user() or {}
+    access_token = user.get("access_token")
+    if not access_token:
+        raise RuntimeError("Login session expired. Please log in again.")
 
-  supabase = get_supabase_client()
-  supabase.postgrest.auth(access_token)
-  return supabase
+    supabase = get_supabase_client()
+    supabase.postgrest.auth(access_token)
+    return supabase
 
 
 def ui_login_required(view_func):
-  @wraps(view_func)
-  def wrapped(*args, **kwargs):
-    if not _ui_user():
-      return redirect(url_for("ui.login", next=request.path))
-    return view_func(*args, **kwargs)
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not _ui_user():
+            return redirect(url_for("ui.login", next=request.path))
+        return view_func(*args, **kwargs)
 
-  return wrapped
+    return wrapped
 
 
 def guest_nav():
@@ -535,16 +535,16 @@ def manage_calendars():
       try:
         supabase = _get_ui_supabase_client()
         result = (
-            supabase.table("calendars")
-            .select("id, name, owner_id, member_ids, events")
-            .eq("owner_id", owner_id)
-            .order("age_timestamp", desc=False)
-            .execute()
+          supabase.table("calendars")
+          .select("id, name, owner_id, member_ids, events")
+          .eq("owner_id", owner_id)
+          .order("age_timestamp", desc=False)
+          .execute()
         )
         records = result.data or []
       except Exception as exc:
-          status = "error"
-          message = f"Failed to load calendars: {exc}"
+        status = "error"
+        message = f"Failed to load calendars: {exc}"
 
     cards = []
     for cal in records:
@@ -606,44 +606,44 @@ def manage_calendars():
 @ui_bp.route("/user/calendars/create", methods=["POST"])
 @ui_login_required
 def create_calendar():
-  name = (request.form.get("name") or "").strip()
-  owner_id = _ui_user()["id"]
+    name = (request.form.get("name") or "").strip()
+    owner_id = _ui_user()["id"]
 
-  if not owner_id or not name:
-    return redirect(url_for(
-      "ui.manage_calendars",
-      owner_id=owner_id,
-      status="error",
-      message="Owner ID and calendar name are required.",
-    ))
+    if not owner_id or not name:
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="error",
+            message="Owner ID and calendar name are required.",
+        ))
 
-  try:
-    supabase = _get_ui_supabase_client()
-    result = (
-      supabase.table("calendars")
-      .insert({
-        "name": name,
-        "owner_id": owner_id,
-        "member_ids": [owner_id],
-        "events": [],
-      })
-      .execute()
-    )
-    created = (result.data or [{}])[0]
-    created_id = created.get("id") or "new row"
-    return redirect(url_for(
-      "ui.manage_calendars",
-      owner_id=owner_id,
-      status="ok",
-      message=f"Calendar created successfully (id: {created_id}).",
-    ))
-  except Exception as exc:
-    return redirect(url_for(
-      "ui.manage_calendars",
-      owner_id=owner_id,
-      status="error",
-      message=f"Failed to create calendar: {exc}",
-    ))
+    try:
+        supabase = _get_ui_supabase_client()
+        result = (
+            supabase.table("calendars")
+            .insert({
+                "name": name,
+                "owner_id": owner_id,
+                "member_ids": [owner_id],
+                "events": [],
+            })
+            .execute()
+        )
+        created = (result.data or [{}])[0]
+        created_id = created.get("id") or "new row"
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="ok",
+            message=f"Calendar created successfully (id: {created_id}).",
+        ))
+    except Exception as exc:
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="error",
+            message=f"Failed to create calendar: {exc}",
+        ))
 
 
 @ui_bp.route("/user/friends")
