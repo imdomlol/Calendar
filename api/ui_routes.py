@@ -472,11 +472,6 @@ def home():
         <p class='muted'>""" + escape(month_label) + """</p>
         """ + month_table + """
       </div>
-      <div class='card'>
-        <h4>Quick actions</h4>
-        <p>Create or manage calendars from the Calendars feature page.</p>
-        <a class='btn' href='/ui/user/calendars'>Manage Calendars</a>
-      </div>
     </div>
     """
     return render_page("Calendar Home", "user", user_nav(), body)
