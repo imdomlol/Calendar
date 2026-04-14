@@ -15,17 +15,14 @@ def register():
         if not email or not password:
             return {"error": "Email and password required"}, 400
 
-        result = supabase.auth.sign_up({
+        payload = {
             "email": email,
-            "password": password
-        })
+            "password": password,
+        }
+        if name:
+            payload["options"] = {"data": {"name": name}}
 
-        if result.user:
-            supabase.table("users").insert({
-                "id": result.user.id,
-                "name": name,
-                "email": email
-            }).execute()
+        result = supabase.auth.sign_up(payload)
 
         return {
             "message": "User created",

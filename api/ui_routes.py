@@ -384,19 +384,14 @@ def register():
         else:
             try:
                 supabase = get_supabase_client()
-                result = supabase.auth.sign_up({
+                payload = {
                     "email": email,
                     "password": password,
-                })
+                }
+                if name:
+                    payload["options"] = {"data": {"name": name}}
 
-                user_obj = getattr(result, "user", None)
-                user_id = getattr(user_obj, "id", None)
-                if user_id:
-                    supabase.table("users").insert({
-                        "id": user_id,
-                        "name": name,
-                        "email": email,
-                    }).execute()
+                supabase.auth.sign_up(payload)
 
                 return redirect(url_for(
                     "ui.login",
