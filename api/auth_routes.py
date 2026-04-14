@@ -1,3 +1,5 @@
+import os
+
 from flask import Blueprint, request
 from utils.supabase_client import get_supabase_client
 
@@ -15,12 +17,19 @@ def register():
         if not email or not password:
             return {"error": "Email and password required"}, 400
 
+        app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+        if not app_base_url:
+            app_base_url = request.url_root.rstrip("/")
+
         payload = {
             "email": email,
             "password": password,
+            "options": {
+                "email_redirect_to": f"{app_base_url}/ui/login",
+            },
         }
         if name:
-            payload["options"] = {"data": {"name": name}}
+            payload["options"]["data"] = {"name": name}
 
         result = supabase.auth.sign_up(payload)
 

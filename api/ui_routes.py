@@ -1,3 +1,4 @@
+import os
 from html import escape
 from functools import wraps
 
@@ -407,8 +408,18 @@ def register():
                     "email": email,
                     "password": password,
                 }
+
+                app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+                if not app_base_url:
+                  app_base_url = request.url_root.rstrip("/")
+
+                options = {
+                  "email_redirect_to": f"{app_base_url}{url_for('ui.login')}",
+                }
                 if name:
-                    payload["options"] = {"data": {"name": name}}
+                  options["data"] = {"name": name}
+
+                payload["options"] = options
 
                 supabase.auth.sign_up(payload)
 
