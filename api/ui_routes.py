@@ -105,11 +105,15 @@ BASE_HTML = """
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
+      .brand a {
+        color: inherit;
+        text-decoration: none;
+      }
     }
     .card {
       background: white;
       border-radius: 16px;
-      padding: 18px;
+      <div class="brand"><a href="{{ url_for('ui.home') }}">Calendar System</a></div>
       border: 1px solid #e5e7eb;
       box-shadow: 0 4px 16px rgba(0,0,0,0.04);
     }
