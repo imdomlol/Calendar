@@ -242,6 +242,25 @@ def ui_login_required(view_func):
     return wrapped
 
 
+def _format_login_error(exception):
+  message = (getattr(exception, "message", None) or str(exception) or "").strip()
+  code = (getattr(exception, "code", None) or "").strip()
+
+  normalized = message.lower()
+  if "email not confirmed" in normalized or code == "email_not_confirmed":
+    if code:
+      return (
+        "Your account is not verified yet. Check your email for the verification link "
+        f"and try again. (code: {code})"
+      )
+    return "Your account is not verified yet. Check your email for the verification link and try again."
+
+  if code:
+    return f"Login failed: {message} (code: {code})"
+
+  return "Invalid credentials."
+
+
 def guest_nav():
     return [
         {"label": "View Calendars", "href": url_for("ui.view_calendars")},
@@ -334,8 +353,8 @@ def login():
                     "access_token": access_token,
                     }
                     return redirect(next_path)
-            except Exception:
-                error = "Invalid credentials."
+            except Exception as exc:
+                error = _format_login_error(exc)
 
     error_block = ""
     if error:
@@ -396,7 +415,10 @@ def register():
                 return redirect(url_for(
                     "ui.login",
                     next=next_path,
-                    info="Account created successfully. Please log in.",
+                  info=(
+                    "Account created. Please check your email to verify your account "
+                    "before logging in."
+                  ),
                 ))
             except Exception as exc:
                 error = f"Could not register: {exc}"
