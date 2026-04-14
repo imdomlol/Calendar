@@ -327,7 +327,7 @@ def features_nav():
     return [
       {"label": "Calendars", "href": url_for("ui.manage_calendars")},
       {"label": "Friends", "href": url_for("ui.manage_friends")},
-      {"label": "Events", "href": url_for("ui.manage_calendars")},
+      {"label": "Events", "href": url_for("ui.manage_events")},
     ]
   return [
     {"label": "Calendars", "href": url_for("ui.view_calendars")},
@@ -835,6 +835,194 @@ def create_calendar():
             owner_id=owner_id,
             status="error",
             message=f"Failed to create calendar: {exc}",
+        ))
+
+
+    @ui_bp.route("/user/events")
+    @ui_login_required
+    def manage_events():
+      user_id = _ui_user()["id"]
+      selected_calendar_id = (request.args.get("calendar_id") or "").strip()
+      status = (request.args.get("status") or "").strip()
+      message = (request.args.get("message") or "").strip()
+
+      calendars = []
+      events_rows = []
+
+      try:
+        supabase = _get_ui_supabase_client()
+        calendars_result = (
+          supabase.table("calendars")
+          .select("id, name")
+          .eq("owner_id", user_id)
+          .order("age_timestamp", desc=False)
+          .execute()
+        )
+        calendars = calendars_result.data or []
+
+        if calendars:
+          if not selected_calendar_id or not any(str(c.get("id")) == selected_calendar_id for c in calendars):
+            selected_calendar_id = str(calendars[0].get("id"))
+
+          events_result = (
+            supabase.table("events")
+            .select("id, title, description, start_timestamp, end_timestamp")
+            .overlaps("calendar_ids", [selected_calendar_id])
+            .order("start_timestamp", desc=False)
+            .execute()
+          )
+          events_rows = events_result.data or []
+      except Exception as exc:
+        status = "error"
+        message = f"Failed to load events: {exc}"
+
+      banner = ""
+      if message:
+        banner_bg = "#dcfce7" if status == "ok" else "#fee2e2"
+        banner_border = "#86efac" if status == "ok" else "#fca5a5"
+        banner = (
+          f"<div class='card' style='margin-bottom:16px; background:{banner_bg}; border-color:{banner_border};'>"
+          f"<p>{escape(message)}</p></div>"
+        )
+
+      if not calendars:
+        body = """
+        <div class='hero'>
+          <h1>Manage Events</h1>
+          <p class='muted'>Create events by attaching them to one of your calendars.</p>
+        </div>
+        """ + banner + """
+        <div class='card'>
+          <h4>No calendars available</h4>
+          <p>Create a calendar first, then come back to add events.</p>
+          <a class='btn' href='/ui/user/calendars'>Go to Calendars</a>
+        </div>
+        """
+        return render_page("Manage Events", "user", user_nav(), body)
+
+      calendar_options = "".join(
+        (
+          f"<option value='{escape(str(c.get('id')))}'"
+          + (" selected" if str(c.get("id")) == selected_calendar_id else "")
+          + f">{escape(str(c.get('name') or 'Untitled Calendar'))}</option>"
+        )
+        for c in calendars
+      )
+
+      event_rows_html = "".join(
+        "<tr>"
+        f"<td>{escape(str(event.get('title') or 'Untitled'))}</td>"
+        f"<td>{escape(str(event.get('start_timestamp') or ''))}</td>"
+        f"<td>{escape(str(event.get('end_timestamp') or ''))}</td>"
+        "</tr>"
+        for event in events_rows
+      )
+      if not event_rows_html:
+        event_rows_html = "<tr><td colspan='3' class='muted'>No events found for this calendar.</td></tr>"
+
+      body = """
+      <div class='hero'>
+        <h1>Manage Events</h1>
+        <p class='muted'>Create an event and attach it to one of your calendars.</p>
+      </div>
+      """ + banner + """
+      <div class='card' style='margin-bottom:16px;'>
+        <form method='GET' action='/ui/user/events' style='display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>
+        <label for='calendar_id'><strong>View calendar:</strong></label>
+        <select id='calendar_id' name='calendar_id' style='padding:8px; border:1px solid #cbd5e1; border-radius:8px; min-width:240px;'>
+          """ + calendar_options + """
+        </select>
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Load</button>
+        </form>
+      </div>
+
+      <div class='card' style='margin-bottom:16px;'>
+        <h4>Add Event</h4>
+        <form method='POST' action='/ui/user/events/create' style='display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;'>
+        <select name='calendar_id' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;'>
+          """ + calendar_options + """
+        </select>
+        <input type='text' name='title' placeholder='Event title' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+        <input type='datetime-local' name='start_timestamp' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+        <input type='datetime-local' name='end_timestamp' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+        <input type='text' name='description' placeholder='Description (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; grid-column:1/-1;' />
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0; width:max-content;'>Create Event</button>
+        </form>
+      </div>
+
+      <div class='card'>
+        <h4>Events in selected calendar</h4>
+        <table>
+        <tr><th>Title</th><th>Start</th><th>End</th></tr>
+        """ + event_rows_html + """
+        </table>
+      </div>
+      """
+      return render_page("Manage Events", "user", user_nav(), body)
+
+
+    @ui_bp.route("/user/events/create", methods=["POST"])
+    @ui_login_required
+    def create_event_ui():
+      user_id = _ui_user()["id"]
+      calendar_id = (request.form.get("calendar_id") or "").strip()
+      title = (request.form.get("title") or "").strip()
+      description = (request.form.get("description") or "").strip()
+      start_timestamp = (request.form.get("start_timestamp") or "").strip()
+      end_timestamp = (request.form.get("end_timestamp") or "").strip()
+
+      if not calendar_id or not title:
+        return redirect(url_for(
+          "ui.manage_events",
+          calendar_id=calendar_id,
+          status="error",
+          message="Calendar and title are required.",
+        ))
+
+      try:
+        supabase = _get_ui_supabase_client()
+        ownership = (
+          supabase.table("calendars")
+          .select("id")
+          .eq("id", calendar_id)
+          .eq("owner_id", user_id)
+          .execute()
+        )
+        if not ownership.data:
+          return redirect(url_for(
+            "ui.manage_events",
+            calendar_id=calendar_id,
+            status="error",
+            message="You do not have access to that calendar.",
+          ))
+
+        payload = {
+          "title": title,
+          "owner_id": user_id,
+          "calendar_ids": [calendar_id],
+        }
+        if description:
+          payload["description"] = description
+        if start_timestamp:
+          payload["start_timestamp"] = start_timestamp
+        if end_timestamp:
+          payload["end_timestamp"] = end_timestamp
+
+        result = supabase.table("events").insert(payload).execute()
+        created = (result.data or [{}])[0]
+        created_id = created.get("id") or "new row"
+        return redirect(url_for(
+          "ui.manage_events",
+          calendar_id=calendar_id,
+          status="ok",
+          message=f"Event created successfully (id: {created_id}).",
+        ))
+      except Exception as exc:
+        return redirect(url_for(
+          "ui.manage_events",
+          calendar_id=calendar_id,
+          status="error",
+          message=f"Failed to create event: {exc}",
         ))
 
 
