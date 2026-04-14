@@ -288,6 +288,22 @@ def _format_login_error(exception):
 
     return "Invalid credentials."
 
+def _resolve_app_base_url():
+    app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+    if not app_base_url:
+        app_base_url = request.url_root.rstrip("/")
+    return app_base_url
+
+def _google_oauth_config():
+    client_id = (
+        os.environ.get("GOOGLE_CLIENT_ID")
+        or ""
+    ).strip()
+    client_secret = (
+        os.environ.get("GOOGLE_CLIENT_SECRET")
+        or ""
+    ).strip()
+    return client_id, client_secret
 
 def _build_month_preview(events_for_calendar):
     today = date.today()
@@ -492,16 +508,15 @@ def settings_connect_google():
 @ui_bp.route("/settings/external/google/login")
 @ui_login_required
 def settings_login_google():
-  client_id = (os.environ.get("GOOGLE_OAUTH_CLIENT_ID") or "").strip()
-  client_secret = (os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET") or "").strip()
+  client_id, client_secret = _google_oauth_config()
 
   if not client_id or not client_secret:
     return redirect(url_for(
       "ui.settings_page",
       status="error",
       message=(
-        "Google OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID and "
-        "GOOGLE_OAUTH_CLIENT_SECRET in your environment."
+        "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and "
+        "GOOGLE_CLIENT_SECRET in your environment."
       ),
     ))
 
@@ -514,9 +529,7 @@ def settings_login_google():
       message=f"Google OAuth dependency error: {exc}",
     ))
 
-  app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
-  if not app_base_url:
-    app_base_url = request.url_root.rstrip("/")
+  app_base_url = _resolve_app_base_url()
 
   redirect_uri = f"{app_base_url}{url_for('ui.settings_google_callback')}"
 
@@ -561,8 +574,7 @@ def settings_google_callback():
       message="Google OAuth state check failed. Please try again.",
     ))
 
-  client_id = (os.environ.get("GOOGLE_OAUTH_CLIENT_ID") or "").strip()
-  client_secret = (os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET") or "").strip()
+  client_id, client_secret = _google_oauth_config()
   redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
 
   try:
@@ -927,9 +939,7 @@ def register():
                     "password": password,
                 }
 
-                app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
-                if not app_base_url:
-                  app_base_url = request.url_root.rstrip("/")
+                app_base_url = _resolve_app_base_url()
 
                 options = {
                   "email_redirect_to": f"{app_base_url}{url_for('ui.login')}",
