@@ -327,10 +327,12 @@ def features_nav():
     return [
       {"label": "Calendars", "href": url_for("ui.manage_calendars")},
       {"label": "Friends", "href": url_for("ui.manage_friends")},
+      {"label": "Events", "href": url_for("ui.manage_calendars")},
     ]
   return [
     {"label": "Calendars", "href": url_for("ui.view_calendars")},
     {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
+    {"label": "Events", "href": url_for("ui.view_events")},
   ]
 
 
