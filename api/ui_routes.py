@@ -80,6 +80,8 @@ BASE_HTML = """
       background: #ffffff;
       border-right: 1px solid #e5e7eb;
       padding: 20px;
+      display: flex;
+      flex-direction: column;
     }
     .sidebar h3 {
       margin-top: 0;
@@ -96,6 +98,25 @@ BASE_HTML = """
     .sidebar a:hover {
       background: #eff6ff;
       color: #1d4ed8;
+    }
+    .settings-btn {
+      margin-top: auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #1f2937;
+      text-decoration: none;
+    }
+    .settings-btn:hover {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #93c5fd;
     }
     .content {
       padding: 24px;
@@ -192,9 +213,12 @@ BASE_HTML = """
 
   <div class=\"layout\">
     <aside class="sidebar">
+      <div>
       {% for item in features_nav %}
         <a href=\"{{ item.href }}\">{{ item.label }}</a>
       {% endfor %}
+      </div>
+      <a class="settings-btn" href="{{ url_for('ui.settings_page') }}" aria-label="Settings">&#9881;</a>
     </aside>
 
     <main class=\"content\">
@@ -354,6 +378,22 @@ def admin_nav():
         {"label": "Suspend User", "href": url_for("ui.suspend_user")},
         {"label": "Unlink External Calendars", "href": url_for("ui.admin_unlink")},
     ]
+
+
+@ui_bp.route("/settings")
+def settings_page():
+    role = "user" if _ui_user() else "guest"
+    nav = user_nav() if _ui_user() else guest_nav()
+    body = """
+    <div class='hero'>
+      <h1>Settings</h1>
+      <p class='muted'>Settings page coming soon.</p>
+    </div>
+    <div class='card'>
+      <p>This page is intentionally empty for now.</p>
+    </div>
+    """
+    return render_page("Settings", role, nav, body)
 
 
 @ui_bp.route("/")
