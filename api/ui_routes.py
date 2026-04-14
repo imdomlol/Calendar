@@ -419,9 +419,8 @@ def settings_page():
     supabase = _get_ui_supabase_client()
     result = (
       supabase.table("externals")
-      .select("id, provider, url, age_timestamp")
+      .select("id, provider, url")
       .eq("user_id", user_id)
-      .order("age_timestamp", desc=False)
       .execute()
     )
     all_rows = result.data or []
@@ -443,12 +442,11 @@ def settings_page():
     external_id = escape(str(row.get("id") or ""))
     provider = escape(str(row.get("provider") or "google"))
     url_value = escape(str(row.get("url") or ""))
-    created_at = escape(str(row.get("age_timestamp") or ""))
     rows_html += f"""
     <tr>
       <td>{provider}</td>
       <td>{url_value}</td>
-      <td>{created_at}</td>
+      <td>{external_id}</td>
       <td>
       <form method='POST' action='/ui/settings/external/google/{external_id}/disconnect' style='margin:0;'>
         <button type='submit' class='btn danger' style='border:none; cursor:pointer; margin-top:0;'>Disconnect</button>
@@ -470,18 +468,13 @@ def settings_page():
     <div class='card'>
     <div class='pill'>External Connections</div>
     <h4>Google API</h4>
-    <p class='muted'>Link a Google Calendar endpoint and optional token metadata.</p>
-    <form method='POST' action='/ui/settings/external/google/connect' style='display:grid; gap:10px;'>
-      <input type='url' name='url' placeholder='Google calendar URL' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='text' name='access_token' placeholder='Access token (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='text' name='refresh_token' placeholder='Refresh token (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0; width:max-content;'>Connect Google</button>
-    </form>
+    <p class='muted'>Sign in with Google to connect your account. No manual token entry required.</p>
+    <a class='btn' href='/ui/settings/external/google/login'>Log in with Google</a>
     </div>
     <div class='card'>
     <h4>Connected Google Accounts</h4>
     <table>
-      <tr><th>Provider</th><th>URL</th><th>Created</th><th>Action</th></tr>
+      <tr><th>Provider</th><th>URL</th><th>Connection ID</th><th>Action</th></tr>
       """ + rows_html + """
     </table>
     </div>
@@ -490,46 +483,185 @@ def settings_page():
   return render_page("Settings", role, nav, body)
 
 
-@ui_bp.route("/settings/external/google/connect", methods=["POST"])
+@ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])
 @ui_login_required
 def settings_connect_google():
-  user_id = _ui_user()["id"]
-  url_value = (request.form.get("url") or "").strip()
-  access_token = (request.form.get("access_token") or "").strip()
-  refresh_token = (request.form.get("refresh_token") or "").strip()
+  return redirect(url_for("ui.settings_login_google"))
 
-  if not url_value:
+
+@ui_bp.route("/settings/external/google/login")
+@ui_login_required
+def settings_login_google():
+  client_id = (os.environ.get("GOOGLE_OAUTH_CLIENT_ID") or "").strip()
+  client_secret = (os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET") or "").strip()
+
+  if not client_id or not client_secret:
     return redirect(url_for(
       "ui.settings_page",
       status="error",
-      message="Google calendar URL is required.",
+      message=(
+        "Google OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID and "
+        "GOOGLE_OAUTH_CLIENT_SECRET in your environment."
+      ),
     ))
-
-  payload = {
-    "user_id": user_id,
-    "provider": "google",
-    "url": url_value,
-  }
-  if access_token:
-    payload["access_token"] = access_token
-  if refresh_token:
-    payload["refresh_token"] = refresh_token
 
   try:
-    supabase = _get_ui_supabase_client()
-    result = supabase.table("externals").insert(payload).execute()
-    created = (result.data or [{}])[0]
-    created_id = created.get("id") or "new row"
-    return redirect(url_for(
-      "ui.settings_page",
-      status="ok",
-      message=f"Google connection created (id: {created_id}).",
-    ))
+    from google_auth_oauthlib.flow import Flow
   except Exception as exc:
     return redirect(url_for(
       "ui.settings_page",
       status="error",
-      message=f"Failed to create Google connection: {exc}",
+      message=f"Google OAuth dependency error: {exc}",
+    ))
+
+  app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+  if not app_base_url:
+    app_base_url = request.url_root.rstrip("/")
+
+  redirect_uri = f"{app_base_url}{url_for('ui.settings_google_callback')}"
+
+  flow = Flow.from_client_config(
+    {
+      "web": {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+      }
+    },
+    scopes=[
+      "https://www.googleapis.com/auth/calendar.readonly",
+    ],
+  )
+  flow.redirect_uri = redirect_uri
+
+  authorization_url, state = flow.authorization_url(
+    access_type="offline",
+    include_granted_scopes="true",
+    prompt="consent",
+  )
+  session["google_oauth_state"] = state
+  session["google_oauth_redirect_uri"] = redirect_uri
+
+  return redirect(authorization_url)
+
+
+@ui_bp.route("/settings/external/google/callback")
+@ui_login_required
+def settings_google_callback():
+  expected_state = (session.get("google_oauth_state") or "").strip()
+  returned_state = (request.args.get("state") or "").strip()
+
+  if not expected_state or returned_state != expected_state:
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message="Google OAuth state check failed. Please try again.",
+    ))
+
+  client_id = (os.environ.get("GOOGLE_OAUTH_CLIENT_ID") or "").strip()
+  client_secret = (os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET") or "").strip()
+  redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
+
+  try:
+    from google_auth_oauthlib.flow import Flow
+  except Exception as exc:
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message=f"Google OAuth dependency error: {exc}",
+    ))
+
+  if not client_id or not client_secret or not redirect_uri:
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message="Google OAuth session expired. Please start again.",
+    ))
+
+  try:
+    flow = Flow.from_client_config(
+      {
+        "web": {
+          "client_id": client_id,
+          "client_secret": client_secret,
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+        }
+      },
+      scopes=[
+        "https://www.googleapis.com/auth/calendar.readonly",
+      ],
+      state=expected_state,
+    )
+    flow.redirect_uri = redirect_uri
+    flow.fetch_token(authorization_response=request.url)
+    credentials = flow.credentials
+
+    user_id = _ui_user()["id"]
+    provider_url = "https://www.googleapis.com/calendar/v3"
+    supabase = _get_ui_supabase_client()
+
+    existing = (
+      supabase.table("externals")
+      .select("id")
+      .eq("user_id", user_id)
+      .eq("provider", "google")
+      .eq("url", provider_url)
+      .execute()
+    )
+
+    if existing.data:
+      update_payload = {}
+      if credentials.token:
+        update_payload["access_token"] = credentials.token
+      if credentials.refresh_token:
+        update_payload["refresh_token"] = credentials.refresh_token
+      if update_payload:
+        (
+          supabase.table("externals")
+          .update(update_payload)
+          .eq("id", existing.data[0].get("id"))
+          .eq("user_id", user_id)
+          .execute()
+        )
+      message = "Google connection refreshed."
+    else:
+      payload = {
+        "user_id": user_id,
+        "provider": "google",
+        "url": provider_url,
+      }
+      if credentials.token:
+        payload["access_token"] = credentials.token
+      if credentials.refresh_token:
+        payload["refresh_token"] = credentials.refresh_token
+
+      result = supabase.table("externals").insert(payload).execute()
+      created = (result.data or [{}])[0]
+      created_id = created.get("id") or "new row"
+      message = f"Google connection created (id: {created_id})."
+
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
+    return redirect(url_for(
+      "ui.settings_page",
+      status="ok",
+      message=message,
+    ))
+  except Exception as exc:
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message=f"Failed Google OAuth connection: {exc}",
     ))
 
 
