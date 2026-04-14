@@ -299,39 +299,144 @@ def admin_nav():
 
 @ui_bp.route("/")
 def home():
+    user = _ui_user()
+
+    if not user:
+        body = """
+        <div class='hero'>
+          <h1>Welcome to the Calendar System</h1>
+          <p class='muted'>Guest preview with an empty calendar. Log in to view your real calendars.</p>
+        </div>
+
+        <div class='card'>
+          <h4>Calendar Preview</h4>
+          <table>
+            <tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>
+            <tr><td> </td><td> </td><td> </td><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+            <tr><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+            <tr><td>12</td><td>13</td><td>14</td><td>15</td><td>16</td><td>17</td><td>18</td></tr>
+            <tr><td>19</td><td>20</td><td>21</td><td>22</td><td>23</td><td>24</td><td>25</td></tr>
+            <tr><td>26</td><td>27</td><td>28</td><td>29</td><td>30</td><td> </td><td> </td></tr>
+          </table>
+          <p class='muted' style='margin-top:12px;'>No events to show for guests.</p>
+        </div>
+        """
+        return render_page("Calendar Info System", "guest", guest_nav(), body)
+
+    user_id = user.get("id")
+    selected_calendar_id = (request.args.get("calendar_id") or "").strip()
+    status_message = ""
+    calendars = []
+    selected_calendar = None
+    events_for_calendar = []
+
+    try:
+        supabase = _get_ui_supabase_client()
+        calendars_result = (
+            supabase.table("calendars")
+            .select("id, name, owner_id")
+            .eq("owner_id", user_id)
+            .order("age_timestamp", desc=False)
+            .execute()
+        )
+        calendars = calendars_result.data or []
+
+        if calendars:
+            selected_calendar = next(
+                (c for c in calendars if str(c.get("id")) == selected_calendar_id),
+                calendars[0],
+            )
+            selected_calendar_id = str(selected_calendar.get("id"))
+
+            events_result = (
+                supabase.table("events")
+                .select("id, title, start_timestamp, end_timestamp")
+                .overlaps("calendar_ids", [selected_calendar_id])
+                .order("start_timestamp", desc=False)
+                .execute()
+            )
+            events_for_calendar = events_result.data or []
+    except Exception as exc:
+        status_message = f"Could not load calendars: {exc}"
+
+    status_block = ""
+    if status_message:
+        status_block = (
+            "<div class='card' style='margin-bottom:16px; background:#fee2e2; border-color:#fca5a5;'>"
+            f"<p>{escape(status_message)}</p></div>"
+        )
+
+    if not calendars:
+        body = """
+        <div class='hero'>
+          <h1>Welcome back</h1>
+          <p class='muted'>You do not have any calendars yet.</p>
+        </div>
+        """ + status_block + """
+        <div class='card'>
+          <h4>No calendars found</h4>
+          <p>Create your first calendar to start viewing it here.</p>
+          <a class='btn' href='/ui/user/calendars'>Go to Calendars</a>
+        </div>
+        """
+        return render_page("Calendar Home", "user", user_nav(), body)
+
+    option_tags = "".join(
+        (
+            f"<option value='{escape(str(c.get('id')))}'"
+            + (" selected" if str(c.get("id")) == selected_calendar_id else "")
+            + f">{escape(str(c.get('name') or 'Untitled Calendar'))}</option>"
+        )
+        for c in calendars
+    )
+
+    event_items = "".join(
+        f"<li><strong>{escape(str(event.get('title') or 'Untitled event'))}</strong>"
+        + (
+            f" <span class='muted'>({escape(str(event.get('start_timestamp') or ''))})</span>"
+            if event.get("start_timestamp")
+            else ""
+        )
+        + "</li>"
+        for event in events_for_calendar[:8]
+    ) or "<li class='muted'>No events for this calendar yet.</li>"
+
+    calendar_name = escape(str(selected_calendar.get("name") or "Untitled Calendar"))
+
     body = """
     <div class='hero'>
-      <h1>Welcome to the Calendar System</h1>
+      <h1>Your Calendar</h1>
+      <p class='muted'>Select a calendar to preview it on your home page.</p>
     </div>
-
+    """ + status_block + """
+    <div class='card' style='margin-bottom:16px;'>
+      <form method='GET' action='/ui/' style='display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>
+        <label for='calendar_id'><strong>Calendar:</strong></label>
+        <select id='calendar_id' name='calendar_id' style='padding:8px; border:1px solid #cbd5e1; border-radius:8px; min-width:240px;'>
+          """ + option_tags + """
+        </select>
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Switch</button>
+      </form>
+    </div>
     <div class='grid'>
       <div class='card'>
-        <div class='pill'>Guest</div>
-        <h4>Public access</h4>
-        <p>Guests can view calendars and events if they exist.</p>
-        <a class='btn' href='/ui/calendars'>Open guest view</a>
+        <div class='pill'>Preview</div>
+        <h4>""" + calendar_name + """</h4>
+        <p class='muted'>Showing up to 8 upcoming items.</p>
+        <ul>""" + event_items + """</ul>
       </div>
       <div class='card'>
-        <div class='pill'>User</div>
-        <h4>Manage account data</h4>
-        <p>Users can manage calendars, events, friends, external syncs, and account settings.</p>
-        <a class='btn' href='/ui/dashboard/user'>Open user dashboard</a>
-      </div>
-      <div class='card'>
-        <div class='pill'>Admin</div>
-        <h4>System tools</h4>
-        <p>Admins can view logs, suspend users, send notifications, and manage external links.</p>
-        <a class='btn' href='/ui/dashboard/admin'>Open admin dashboard</a>
+        <h4>Quick actions</h4>
+        <p>Create or manage calendars from the Calendars feature page.</p>
+        <a class='btn' href='/ui/user/calendars'>Manage Calendars</a>
       </div>
     </div>
     """
-    return render_page("Calendar Info System", "guest", guest_nav(), body)
+    return render_page("Calendar Home", "user", user_nav(), body)
 
 
 @ui_bp.route("/home")
 def brand_home():
-    if _ui_user():
-        return redirect(url_for("ui.dashboard", role="user"))
     return redirect(url_for("ui.home"))
 
 
