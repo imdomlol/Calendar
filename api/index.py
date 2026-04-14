@@ -12,6 +12,7 @@ from flask_cors import CORS
 from utils.auth import require_auth
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-ui-secret-key")
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],

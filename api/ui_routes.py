@@ -1,6 +1,7 @@
 from html import escape
+from functools import wraps
 
-from flask import Blueprint, render_template_string, request, redirect, url_for
+from flask import Blueprint, render_template_string, request, redirect, session, url_for
 from models.calendar import Calendar
 from utils.supabase_client import get_supabase_client
 
@@ -200,6 +201,23 @@ def render_page(title, role, nav, body):
     return render_template_string(BASE_HTML, title=title, role=role, nav=nav, body=body)
 
 
+def _ui_user():
+  user = session.get("ui_user")
+  if isinstance(user, dict) and user.get("id"):
+    return user
+  return None
+
+
+def ui_login_required(view_func):
+  @wraps(view_func)
+  def wrapped(*args, **kwargs):
+    if not _ui_user():
+      return redirect(url_for("ui.login", next=request.path))
+    return view_func(*args, **kwargs)
+
+  return wrapped
+
+
 def guest_nav():
     return [
         {"label": "View Calendars", "href": url_for("ui.view_calendars")},
@@ -258,8 +276,69 @@ def home():
     return render_page("Calendar Info System", "guest", guest_nav(), body)
 
 
+@ui_bp.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
+    next_path = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        password = request.form.get("password") or ""
+
+        if not email or not password:
+            error = "Email and password are required."
+        else:
+            try:
+                supabase = get_supabase_client()
+                result = supabase.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password,
+                })
+                user_obj = getattr(result, "user", None)
+                user_id = getattr(user_obj, "id", None)
+                if not user_id:
+                    error = "Login failed."
+                else:
+                    session["ui_user"] = {
+                        "id": user_id,
+                        "email": getattr(user_obj, "email", email),
+                    }
+                    return redirect(next_path)
+            except Exception:
+                error = "Invalid credentials."
+
+    error_block = ""
+    if error:
+        error_block = f"<p style='color:#b91c1c; margin:0 0 12px 0;'>{escape(error)}</p>"
+
+    body = f"""
+    <div class='hero'>
+      <h1>Log In</h1>
+      <p class='muted'>Sign in to access user and admin pages.</p>
+    </div>
+    <div class='card'>
+      {error_block}
+      <form method='POST' action='/ui/login?next={escape(next_path)}' style='display:flex; flex-direction:column; gap:10px; max-width:420px;'>
+      <input type='email' name='email' placeholder='Email' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+      <input type='password' name='password' placeholder='Password' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+      <button type='submit' class='btn' style='border:none; cursor:pointer; width:max-content; margin-top:0;'>Log In</button>
+      </form>
+    </div>
+    """
+    return render_page("Log In", "guest", guest_nav(), body)
+
+
+@ui_bp.route("/logout")
+def logout():
+    session.pop("ui_user", None)
+    return redirect(url_for("ui.home"))
+
+
 @ui_bp.route("/dashboard/<role>")
 def dashboard(role):
+    if role in {"user", "admin"} and not _ui_user():
+        return redirect(url_for("ui.login", next=request.path))
+
     if role == "admin":
         nav = admin_nav()
         body = """
@@ -329,6 +408,7 @@ def view_events():
 
 
 @ui_bp.route("/user/externals")
+@ui_login_required
 def manage_externals():
     items = "".join(f"<li>{name}</li>" for name in externals)
     body = f"""
@@ -342,8 +422,9 @@ def manage_externals():
 
 
 @ui_bp.route("/user/calendars")
+@ui_login_required
 def manage_calendars():
-    owner_id = (request.args.get("owner_id") or "").strip()
+    owner_id = _ui_user()["id"]
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
 
@@ -388,10 +469,7 @@ def manage_calendars():
         border_class = "#86efac" if status == "ok" else "#fca5a5"
         banner = f"<div class='card' style='margin-bottom:16px; background:{banner_class}; border-color:{border_class};'><p>{escape(message)}</p></div>"
 
-    results_section = ""
-    if not owner_id:
-        results_section = "<div class='empty'><h3>Enter Owner ID</h3><p>Provide owner ID to load and manage that user's calendars.</p></div>"
-    elif not cards:
+    if not cards:
         results_section = "<div class='empty'><h3>No calendars found</h3><p>No calendar rows exist for this owner id yet.</p></div>"
     else:
         results_section = "<div class='grid'>" + "".join(cards) + "</div>"
@@ -400,21 +478,15 @@ def manage_calendars():
     body = """
     <div class='hero'>
       <h1>Manage Calendars</h1>
-      <p class='muted'>Create calendars in Supabase and load calendars by owner id.</p>
+      <p class='muted'>Create calendars in Supabase. Owner id is auto-filled from your login.</p>
     </div>
     """ + banner + """
     <div class='card' style='margin-bottom:16px;'>
       <h4>Available actions</h4>
       <p>Create Calendar • Add Member • Remove Member • Manage Events • Remove Calendar</p>
+      <p class='muted'>Logged in as owner id: """ + safe_owner_value + """</p>
       <form method='POST' action='/ui/user/calendars/create' style='margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;'>
-        <input
-          type='text'
-          name='owner_id'
-          placeholder='Owner ID (required)'
-          value='""" + safe_owner_value + """'
-          required
-          style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:280px;'
-        />
+        <input type='hidden' name='owner_id' value='""" + safe_owner_value + """' />
         <input
           type='text'
           name='name'
@@ -424,56 +496,48 @@ def manage_calendars():
         />
         <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Create Calendar</button>
       </form>
-      <form method='GET' action='/ui/user/calendars' style='margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;'>
-        <input
-          type='text'
-          name='owner_id'
-          placeholder='Owner ID to load calendars'
-          value='""" + safe_owner_value + """'
-          required
-          style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:280px;'
-        />
-        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Load Calendars</button>
-      </form>
+      <a class='btn' href='/ui/logout' style='margin-top:12px;'>Log Out</a>
     </div>
     """ + results_section
     return render_page("Manage Calendars", "user", user_nav(), body)
 
 
 @ui_bp.route("/user/calendars/create", methods=["POST"])
+@ui_login_required
 def create_calendar():
-    name = (request.form.get("name") or "").strip()
-    owner_id = (request.form.get("owner_id") or "").strip()
+  name = (request.form.get("name") or "").strip()
+  owner_id = _ui_user()["id"]
 
-    if not owner_id or not name:
-        return redirect(url_for(
-            "ui.manage_calendars",
-            owner_id=owner_id,
-            status="error",
-            message="Owner ID and calendar name are required.",
-        ))
+  if not owner_id or not name:
+    return redirect(url_for(
+      "ui.manage_calendars",
+      owner_id=owner_id,
+      status="error",
+      message="Owner ID and calendar name are required.",
+    ))
 
-    try:
-        calendar = Calendar(name=name, owner_id=owner_id)
-        result = calendar.save()
-        created = (result.data or [{}])[0]
-        created_id = created.get("id") or "new row"
-        return redirect(url_for(
-            "ui.manage_calendars",
-            owner_id=owner_id,
-            status="ok",
-            message=f"Calendar created successfully (id: {created_id}).",
-        ))
-    except Exception as exc:
-        return redirect(url_for(
-            "ui.manage_calendars",
-            owner_id=owner_id,
-            status="error",
-            message=f"Failed to create calendar: {exc}",
-        ))
+  try:
+    calendar = Calendar(name=name, owner_id=owner_id)
+    result = calendar.save()
+    created = (result.data or [{}])[0]
+    created_id = created.get("id") or "new row"
+    return redirect(url_for(
+      "ui.manage_calendars",
+      owner_id=owner_id,
+      status="ok",
+      message=f"Calendar created successfully (id: {created_id}).",
+    ))
+  except Exception as exc:
+    return redirect(url_for(
+      "ui.manage_calendars",
+      owner_id=owner_id,
+      status="error",
+      message=f"Failed to create calendar: {exc}",
+    ))
 
 
 @ui_bp.route("/user/friends")
+@ui_login_required
 def manage_friends():
     names = "".join(f"<li>{friend}</li>" for friend in friends)
     body = f"""
@@ -487,6 +551,7 @@ def manage_friends():
 
 
 @ui_bp.route("/user/remove-account")
+@ui_login_required
 def remove_account():
     body = """
     <div class='hero'><h1>Remove Account</h1><p class='muted'>This is a placeholder confirmation screen.</p></div>
@@ -500,6 +565,7 @@ def remove_account():
 
 
 @ui_bp.route("/admin/logs")
+@ui_login_required
 def system_logs():
     lines = "".join(f"<tr><td>{i + 1}</td><td>{line}</td></tr>" for i, line in enumerate(logs))
     body = f"""
@@ -513,6 +579,7 @@ def system_logs():
 
 
 @ui_bp.route("/admin/notifications")
+@ui_login_required
 def send_notification():
     body = """
     <div class='hero'><h1>System-Wide Notifications</h1><p class='muted'>Draft and send a notification to every user.</p></div>
@@ -527,6 +594,7 @@ def send_notification():
 
 
 @ui_bp.route("/admin/suspend")
+@ui_login_required
 def suspend_user():
     body = """
     <div class='hero'><h1>Suspend User Account</h1><p class='muted'>Admin control panel for account suspension.</p></div>
@@ -541,6 +609,7 @@ def suspend_user():
 
 
 @ui_bp.route("/admin/unlink")
+@ui_login_required
 def admin_unlink():
     providers = "".join(f"<li>{name}</li>" for name in externals)
     body = f"""
