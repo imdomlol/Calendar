@@ -208,6 +208,17 @@ def _ui_user():
   return None
 
 
+def _get_ui_supabase_client():
+  user = _ui_user() or {}
+  access_token = user.get("access_token")
+  if not access_token:
+    raise RuntimeError("Login session expired. Please log in again.")
+
+  supabase = get_supabase_client()
+  supabase.postgrest.auth(access_token)
+  return supabase
+
+
 def ui_login_required(view_func):
   @wraps(view_func)
   def wrapped(*args, **kwargs):
@@ -280,6 +291,8 @@ def home():
 def login():
     error = ""
     next_path = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+    if not next_path.startswith("/"):
+        next_path = url_for("ui.dashboard", role="user")
 
     if request.method == "POST":
         email = (request.form.get("email") or "").strip()
@@ -295,13 +308,16 @@ def login():
                     "password": password,
                 })
                 user_obj = getattr(result, "user", None)
+                session_obj = getattr(result, "session", None)
                 user_id = getattr(user_obj, "id", None)
+                access_token = getattr(session_obj, "access_token", None)
                 if not user_id:
                     error = "Login failed."
                 else:
                     session["ui_user"] = {
                         "id": user_id,
                         "email": getattr(user_obj, "email", email),
+                    "access_token": access_token,
                     }
                     return redirect(next_path)
             except Exception:
@@ -430,19 +446,19 @@ def manage_calendars():
 
     records = []
     if owner_id:
-        try:
-            supabase = get_supabase_client()
-            result = (
-                supabase.table("calendars")
-                .select("id, name, owner_id, member_ids, events")
-                .eq("owner_id", owner_id)
-                .order("age_timestamp", desc=False)
-                .execute()
-            )
-            records = result.data or []
-        except Exception as exc:
-            status = "error"
-            message = f"Failed to load calendars: {exc}"
+      try:
+        supabase = _get_ui_supabase_client()
+        result = (
+            supabase.table("calendars")
+            .select("id, name, owner_id, member_ids, events")
+            .eq("owner_id", owner_id)
+            .order("age_timestamp", desc=False)
+            .execute()
+        )
+        records = result.data or []
+      except Exception as exc:
+          status = "error"
+          message = f"Failed to load calendars: {exc}"
 
     cards = []
     for cal in records:
@@ -517,8 +533,17 @@ def create_calendar():
     ))
 
   try:
-    calendar = Calendar(name=name, owner_id=owner_id)
-    result = calendar.save()
+    supabase = _get_ui_supabase_client()
+    result = (
+      supabase.table("calendars")
+      .insert({
+        "name": name,
+        "owner_id": owner_id,
+        "member_ids": [owner_id],
+        "events": [],
+      })
+      .execute()
+    )
     created = (result.data or [{}])[0]
     created_id = created.get("id") or "new row"
     return redirect(url_for(
