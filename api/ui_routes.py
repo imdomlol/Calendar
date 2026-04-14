@@ -1,4 +1,8 @@
-from flask import Blueprint, render_template_string, url_for
+from html import escape
+
+from flask import Blueprint, render_template_string, request, redirect, url_for
+from models.calendar import Calendar
+from utils.supabase_client import get_supabase_client
 
 ui_bp = Blueprint("ui", __name__)
 
@@ -339,31 +343,134 @@ def manage_externals():
 
 @ui_bp.route("/user/calendars")
 def manage_calendars():
+    owner_id = (request.args.get("owner_id") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    message = (request.args.get("message") or "").strip()
+
+    records = []
+    if owner_id:
+        try:
+            supabase = get_supabase_client()
+            result = (
+                supabase.table("calendars")
+                .select("id, name, owner_id, member_ids, events")
+                .eq("owner_id", owner_id)
+                .order("age_timestamp", desc=False)
+                .execute()
+            )
+            records = result.data or []
+        except Exception as exc:
+            status = "error"
+            message = f"Failed to load calendars: {exc}"
+
     cards = []
-    for cal in calendars:
-        cal_events = [e for e in events if e["calendar_id"] == cal["id"]]
-        event_list = "".join(f"<li>{e['title']} - {e['date']} {e['time']}</li>" for e in cal_events) or "<li>No events yet</li>"
+    for cal in records:
+        calendar_id = escape(str(cal.get("id") or ""))
+        calendar_name = escape(str(cal.get("name") or "Untitled"))
+        calendar_owner = escape(str(cal.get("owner_id") or ""))
+        member_list = cal.get("member_ids") or []
+        members = "".join(f"<li>{escape(str(member))}</li>" for member in member_list) or "<li>No members yet</li>"
+        event_count = len(cal.get("events") or [])
         cards.append(f"""
           <div class='card'>
-            <div class='pill'>Calendar #{cal['id']}</div>
-            <h4>{cal['name']}</h4>
-            <p>Owner: {cal['owner']}</p>
+            <div class='pill'>Calendar #{calendar_id}</div>
+            <h4>{calendar_name}</h4>
+            <p>Owner ID: {calendar_owner}</p>
+            <p>Events linked: {event_count}</p>
             <p><strong>Actions:</strong> Create event, edit event, delete event, manage members, remove calendar</p>
-            <ul>{event_list}</ul>
+            <ul>{members}</ul>
           </div>
         """)
+
+    banner = ""
+    if message:
+        banner_class = "#dcfce7" if status == "ok" else "#fee2e2"
+        border_class = "#86efac" if status == "ok" else "#fca5a5"
+        banner = f"<div class='card' style='margin-bottom:16px; background:{banner_class}; border-color:{border_class};'><p>{escape(message)}</p></div>"
+
+    results_section = ""
+    if not owner_id:
+        results_section = "<div class='empty'><h3>Enter Owner ID</h3><p>Provide owner ID to load and manage that user's calendars.</p></div>"
+    elif not cards:
+        results_section = "<div class='empty'><h3>No calendars found</h3><p>No calendar rows exist for this owner id yet.</p></div>"
+    else:
+        results_section = "<div class='grid'>" + "".join(cards) + "</div>"
+
+    safe_owner_value = escape(owner_id)
     body = """
     <div class='hero'>
       <h1>Manage Calendars</h1>
-      <p class='muted'>Create calendars, manage members, and manage events.</p>
+      <p class='muted'>Create calendars in Supabase and load calendars by owner id.</p>
     </div>
+    """ + banner + """
     <div class='card' style='margin-bottom:16px;'>
       <h4>Available actions</h4>
       <p>Create Calendar • Add Member • Remove Member • Manage Events • Remove Calendar</p>
+      <form method='POST' action='/ui/user/calendars/create' style='margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;'>
+        <input
+          type='text'
+          name='owner_id'
+          placeholder='Owner ID (required)'
+          value='""" + safe_owner_value + """'
+          required
+          style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:280px;'
+        />
+        <input
+          type='text'
+          name='name'
+          placeholder='Calendar name (required)'
+          required
+          style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;'
+        />
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Create Calendar</button>
+      </form>
+      <form method='GET' action='/ui/user/calendars' style='margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;'>
+        <input
+          type='text'
+          name='owner_id'
+          placeholder='Owner ID to load calendars'
+          value='""" + safe_owner_value + """'
+          required
+          style='padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:280px;'
+        />
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Load Calendars</button>
+      </form>
     </div>
-    <div class='grid'>
-    """ + "".join(cards) + "</div>"
+    """ + results_section
     return render_page("Manage Calendars", "user", user_nav(), body)
+
+
+@ui_bp.route("/user/calendars/create", methods=["POST"])
+def create_calendar():
+    name = (request.form.get("name") or "").strip()
+    owner_id = (request.form.get("owner_id") or "").strip()
+
+    if not owner_id or not name:
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="error",
+            message="Owner ID and calendar name are required.",
+        ))
+
+    try:
+        calendar = Calendar(name=name, owner_id=owner_id)
+        result = calendar.save()
+        created = (result.data or [{}])[0]
+        created_id = created.get("id") or "new row"
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="ok",
+            message=f"Calendar created successfully (id: {created_id}).",
+        ))
+    except Exception as exc:
+        return redirect(url_for(
+            "ui.manage_calendars",
+            owner_id=owner_id,
+            status="error",
+            message=f"Failed to create calendar: {exc}",
+        ))
 
 
 @ui_bp.route("/user/friends")
