@@ -1,4 +1,6 @@
 import os
+import calendar as pycalendar
+from datetime import date
 from html import escape
 from functools import wraps
 
@@ -246,22 +248,72 @@ def ui_login_required(view_func):
 
 
 def _format_login_error(exception):
-  message = (getattr(exception, "message", None) or str(exception) or "").strip()
-  code = (getattr(exception, "code", None) or "").strip()
+    message = (getattr(exception, "message", None) or str(exception) or "").strip()
+    code = (getattr(exception, "code", None) or "").strip()
 
-  normalized = message.lower()
-  if "email not confirmed" in normalized or code == "email_not_confirmed":
+    normalized = message.lower()
+    if "email not confirmed" in normalized or code == "email_not_confirmed":
+        if code:
+            return (
+                "Your account is not verified yet. Check your email for the verification link "
+                f"and try again. (code: {code})"
+            )
+        return "Your account is not verified yet. Check your email for the verification link and try again."
+
     if code:
-      return (
-        "Your account is not verified yet. Check your email for the verification link "
-        f"and try again. (code: {code})"
-      )
-    return "Your account is not verified yet. Check your email for the verification link and try again."
+        return f"Login failed: {message} (code: {code})"
 
-  if code:
-    return f"Login failed: {message} (code: {code})"
+    return "Invalid credentials."
 
-  return "Invalid credentials."
+
+def _build_month_preview(events_for_calendar):
+    today = date.today()
+    year = today.year
+    month = today.month
+
+    event_counts = {}
+    for event in events_for_calendar:
+        start_timestamp = str(event.get("start_timestamp") or "")
+        if len(start_timestamp) < 10:
+            continue
+
+        date_part = start_timestamp[:10]
+        parts = date_part.split("-")
+        if len(parts) != 3:
+            continue
+
+        try:
+            event_year = int(parts[0])
+            event_month = int(parts[1])
+            event_day = int(parts[2])
+        except ValueError:
+            continue
+
+        if event_year == year and event_month == month:
+            event_counts[event_day] = event_counts.get(event_day, 0) + 1
+
+    header = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>"
+    rows = ""
+    for week in pycalendar.monthcalendar(year, month):
+        cells = ""
+        for day in week:
+            if day == 0:
+                cells += "<td> </td>"
+                continue
+
+            count = event_counts.get(day, 0)
+            if count:
+                cells += (
+                    f"<td><strong>{day}</strong><br /><span class='muted' style='font-size:12px;'>{count} event(s)</span></td>"
+                )
+            else:
+                cells += f"<td>{day}</td>"
+
+        rows += f"<tr>{cells}</tr>"
+
+    month_label = f"{pycalendar.month_name[month]} {year}"
+    table_html = f"<table>{header}{rows}</table>"
+    return month_label, table_html
 
 
 def guest_nav():
@@ -390,18 +442,8 @@ def home():
         for c in calendars
     )
 
-    event_items = "".join(
-        f"<li><strong>{escape(str(event.get('title') or 'Untitled event'))}</strong>"
-        + (
-            f" <span class='muted'>({escape(str(event.get('start_timestamp') or ''))})</span>"
-            if event.get("start_timestamp")
-            else ""
-        )
-        + "</li>"
-        for event in events_for_calendar[:8]
-    ) or "<li class='muted'>No events for this calendar yet.</li>"
-
     calendar_name = escape(str(selected_calendar.get("name") or "Untitled Calendar"))
+    month_label, month_table = _build_month_preview(events_for_calendar)
 
     body = """
     <div class='hero'>
@@ -422,8 +464,8 @@ def home():
       <div class='card'>
         <div class='pill'>Preview</div>
         <h4>""" + calendar_name + """</h4>
-        <p class='muted'>Showing up to 8 upcoming items.</p>
-        <ul>""" + event_items + """</ul>
+        <p class='muted'>""" + escape(month_label) + """</p>
+        """ + month_table + """
       </div>
       <div class='card'>
         <h4>Quick actions</h4>
