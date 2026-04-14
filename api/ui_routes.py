@@ -189,9 +189,9 @@ BASE_HTML = """
   </div>
 
   <div class=\"layout\">
-    <aside class=\"sidebar\">
-      <h3>{{ role|title }} Menu</h3>
-      {% for item in nav %}
+    <aside class="sidebar">
+      <h3>Features</h3>
+      {% for item in features_nav %}
         <a href=\"{{ item.href }}\">{{ item.label }}</a>
       {% endfor %}
     </aside>
@@ -211,6 +211,7 @@ def render_page(title, role, nav, body):
         title=title,
         role=role,
         nav=nav,
+    features_nav=features_nav(),
         body=body,
         ui_user=_ui_user(),
     )
@@ -268,6 +269,12 @@ def guest_nav():
         {"label": "View Calendars", "href": url_for("ui.view_calendars")},
         {"label": "View Events", "href": url_for("ui.view_events")},
     ]
+
+
+def features_nav():
+  if _ui_user():
+    return [{"label": "Calendars", "href": url_for("ui.manage_calendars")}]
+  return [{"label": "Calendars", "href": url_for("ui.view_calendars")}]
 
 
 def user_nav():
