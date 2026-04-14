@@ -177,6 +177,11 @@ BASE_HTML = """
       <a href=\"{{ url_for('ui.home') }}\">Guest</a>
       <a href=\"{{ url_for('ui.dashboard', role='user') }}\">User</a>
       <a href=\"{{ url_for('ui.dashboard', role='admin') }}\">Admin</a>
+      {% if ui_user %}
+      <a href="{{ url_for('ui.logout') }}">Log Out</a>
+      {% else %}
+      <a href="{{ url_for('ui.login', next=request.path) }}">Log In</a>
+      {% endif %}
     </div>
   </div>
 
@@ -198,7 +203,14 @@ BASE_HTML = """
 
 
 def render_page(title, role, nav, body):
-    return render_template_string(BASE_HTML, title=title, role=role, nav=nav, body=body)
+  return render_template_string(
+    BASE_HTML,
+    title=title,
+    role=role,
+    nav=nav,
+    body=body,
+    ui_user=_ui_user(),
+  )
 
 
 def _ui_user():
@@ -512,7 +524,6 @@ def manage_calendars():
         />
         <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Create Calendar</button>
       </form>
-      <a class='btn' href='/ui/logout' style='margin-top:12px;'>Log Out</a>
     </div>
     """ + results_section
     return render_page("Manage Calendars", "user", user_nav(), body)
