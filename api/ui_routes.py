@@ -192,7 +192,6 @@ BASE_HTML = """
 
   <div class=\"layout\">
     <aside class="sidebar">
-      <h3>Features</h3>
       {% for item in features_nav %}
         <a href=\"{{ item.href }}\">{{ item.label }}</a>
       {% endfor %}
@@ -325,8 +324,14 @@ def guest_nav():
 
 def features_nav():
   if _ui_user():
-    return [{"label": "Calendars", "href": url_for("ui.manage_calendars")}]
-  return [{"label": "Calendars", "href": url_for("ui.view_calendars")}]
+    return [
+      {"label": "Calendars", "href": url_for("ui.manage_calendars")},
+      {"label": "Friends", "href": url_for("ui.manage_friends")},
+    ]
+  return [
+    {"label": "Calendars", "href": url_for("ui.view_calendars")},
+    {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
+  ]
 
 
 def user_nav():
