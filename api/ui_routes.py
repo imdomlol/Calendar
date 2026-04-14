@@ -177,7 +177,7 @@ BASE_HTML = """
 </head>
 <body>
   <div class=\"topbar\">
-    <div class=\"brand\"><a href=\"{{ url_for('ui.home') }}\">Calendar System</a></div>
+    <div class=\"brand\"><a href=\"{{ url_for('ui.brand_home') }}\">Calendar System</a></div>
     <div class=\"top-links\">
       {% if ui_user %}
       <a href="{{ url_for('ui.logout') }}">Log Out</a>
@@ -326,6 +326,13 @@ def home():
     </div>
     """
     return render_page("Calendar Info System", "guest", guest_nav(), body)
+
+
+@ui_bp.route("/home")
+def brand_home():
+    if _ui_user():
+        return redirect(url_for("ui.dashboard", role="user"))
+    return redirect(url_for("ui.home"))
 
 
 @ui_bp.route("/login", methods=["GET", "POST"])
