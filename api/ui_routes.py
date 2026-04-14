@@ -382,18 +382,200 @@ def admin_nav():
 
 @ui_bp.route("/settings")
 def settings_page():
-    role = "user" if _ui_user() else "guest"
-    nav = user_nav() if _ui_user() else guest_nav()
+  user = _ui_user()
+  role = "user" if user else "guest"
+  nav = user_nav() if user else guest_nav()
+
+  status = (request.args.get("status") or "").strip()
+  message = (request.args.get("message") or "").strip()
+
+  banner = ""
+  if message:
+    banner_bg = "#dcfce7" if status == "ok" else "#fee2e2"
+    banner_border = "#86efac" if status == "ok" else "#fca5a5"
+    banner = (
+      f"<div class='card' style='margin-bottom:16px; background:{banner_bg}; border-color:{banner_border};'>"
+      f"<p>{escape(message)}</p></div>"
+    )
+
+  if not user:
     body = """
     <div class='hero'>
       <h1>Settings</h1>
-      <p class='muted'>Settings page coming soon.</p>
+      <p class='muted'>Sign in to manage external calendar connections.</p>
     </div>
     <div class='card'>
-      <p>This page is intentionally empty for now.</p>
+      <h4>External Connections</h4>
+      <p>Google API connection controls are available after login.</p>
+      <a class='btn' href='/ui/login?next=/ui/settings'>Log In</a>
     </div>
     """
     return render_page("Settings", role, nav, body)
+
+  user_id = user.get("id")
+  google_rows = []
+
+  try:
+    supabase = _get_ui_supabase_client()
+    result = (
+      supabase.table("externals")
+      .select("id, provider, url, age_timestamp")
+      .eq("user_id", user_id)
+      .order("age_timestamp", desc=False)
+      .execute()
+    )
+    all_rows = result.data or []
+    google_rows = [
+      row
+      for row in all_rows
+      if "google" in str(row.get("provider") or "").lower()
+    ]
+  except Exception as exc:
+    status = "error"
+    message = f"Failed to load external connections: {exc}"
+    banner = (
+      "<div class='card' style='margin-bottom:16px; background:#fee2e2; border-color:#fca5a5;'>"
+      f"<p>{escape(message)}</p></div>"
+    )
+
+  rows_html = ""
+  for row in google_rows:
+    external_id = escape(str(row.get("id") or ""))
+    provider = escape(str(row.get("provider") or "google"))
+    url_value = escape(str(row.get("url") or ""))
+    created_at = escape(str(row.get("age_timestamp") or ""))
+    rows_html += f"""
+    <tr>
+      <td>{provider}</td>
+      <td>{url_value}</td>
+      <td>{created_at}</td>
+      <td>
+      <form method='POST' action='/ui/settings/external/google/{external_id}/disconnect' style='margin:0;'>
+        <button type='submit' class='btn danger' style='border:none; cursor:pointer; margin-top:0;'>Disconnect</button>
+      </form>
+      </td>
+    </tr>
+    """
+
+  if not rows_html:
+    rows_html = "<tr><td colspan='4' class='muted'>No Google connections yet.</td></tr>"
+
+  body = """
+  <div class='hero'>
+    <h1>Settings</h1>
+    <p class='muted'>Manage external calendar providers connected to your account.</p>
+  </div>
+  """ + banner + """
+  <div class='grid'>
+    <div class='card'>
+    <div class='pill'>External Connections</div>
+    <h4>Google API</h4>
+    <p class='muted'>Link a Google Calendar endpoint and optional token metadata.</p>
+    <form method='POST' action='/ui/settings/external/google/connect' style='display:grid; gap:10px;'>
+      <input type='url' name='url' placeholder='Google calendar URL' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+      <input type='text' name='access_token' placeholder='Access token (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+      <input type='text' name='refresh_token' placeholder='Refresh token (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
+      <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0; width:max-content;'>Connect Google</button>
+    </form>
+    </div>
+    <div class='card'>
+    <h4>Connected Google Accounts</h4>
+    <table>
+      <tr><th>Provider</th><th>URL</th><th>Created</th><th>Action</th></tr>
+      """ + rows_html + """
+    </table>
+    </div>
+  </div>
+  """
+  return render_page("Settings", role, nav, body)
+
+
+@ui_bp.route("/settings/external/google/connect", methods=["POST"])
+@ui_login_required
+def settings_connect_google():
+  user_id = _ui_user()["id"]
+  url_value = (request.form.get("url") or "").strip()
+  access_token = (request.form.get("access_token") or "").strip()
+  refresh_token = (request.form.get("refresh_token") or "").strip()
+
+  if not url_value:
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message="Google calendar URL is required.",
+    ))
+
+  payload = {
+    "user_id": user_id,
+    "provider": "google",
+    "url": url_value,
+  }
+  if access_token:
+    payload["access_token"] = access_token
+  if refresh_token:
+    payload["refresh_token"] = refresh_token
+
+  try:
+    supabase = _get_ui_supabase_client()
+    result = supabase.table("externals").insert(payload).execute()
+    created = (result.data or [{}])[0]
+    created_id = created.get("id") or "new row"
+    return redirect(url_for(
+      "ui.settings_page",
+      status="ok",
+      message=f"Google connection created (id: {created_id}).",
+    ))
+  except Exception as exc:
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message=f"Failed to create Google connection: {exc}",
+    ))
+
+
+@ui_bp.route("/settings/external/google/<external_id>/disconnect", methods=["POST"])
+@ui_login_required
+def settings_disconnect_google(external_id):
+  user_id = _ui_user()["id"]
+
+  try:
+    supabase = _get_ui_supabase_client()
+    existing = (
+      supabase.table("externals")
+      .select("id, provider")
+      .eq("id", external_id)
+      .eq("user_id", user_id)
+      .execute()
+    )
+
+    rows = existing.data or []
+    if not rows:
+      return redirect(url_for(
+        "ui.settings_page",
+        status="error",
+        message="Connection not found.",
+      ))
+
+    provider_value = str(rows[0].get("provider") or "").lower()
+    if "google" not in provider_value:
+      return redirect(url_for(
+        "ui.settings_page",
+        status="error",
+        message="Only Google connections can be removed from this section.",
+      ))
+
+    supabase.table("externals").delete().eq("id", external_id).eq("user_id", user_id).execute()
+    return redirect(url_for(
+      "ui.settings_page",
+      status="ok",
+      message="Google connection disconnected.",
+    ))
+  except Exception as exc:
+    return redirect(url_for(
+      "ui.settings_page",
+      status="error",
+      message=f"Failed to disconnect Google connection: {exc}",
+    ))
 
 
 @ui_bp.route("/")
