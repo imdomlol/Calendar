@@ -175,9 +175,6 @@ BASE_HTML = """
   <div class=\"topbar\">
     <div class=\"brand\">Calendar System</div>
     <div class=\"top-links\">
-      <a href=\"{{ url_for('ui.home') }}\">Guest</a>
-      <a href=\"{{ url_for('ui.dashboard', role='user') }}\">User</a>
-      <a href=\"{{ url_for('ui.dashboard', role='admin') }}\">Admin</a>
       {% if ui_user %}
       <a href="{{ url_for('ui.logout') }}">Log Out</a>
       {% else %}
