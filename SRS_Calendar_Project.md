@@ -2,7 +2,7 @@
 
 **Project Name:** Calendar
 
-**Version:** 1.1 (Implementation-Aligned Draft)
+**Version:** 1.1 (Draft)
 
 **Date:** 2026-04-15
 
