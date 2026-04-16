@@ -152,6 +152,9 @@ th { background: #eff6ff; }
   border: 1px dashed #cbd5e1;
   border-radius: 16px;
 }
+.banner { margin-bottom: 16px; }
+.banner-ok { background: #dcfce7; border-color: #86efac; }
+.banner-error { background: #fee2e2; border-color: #fca5a5; }
 .build-footer {
   text-align: center;
   padding: 8px 16px;

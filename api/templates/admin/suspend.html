@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+  <h1>Suspend User Account</h1>
+  <p class="muted">Admin control panel for account suspension.</p>
+</div>
+<div class="card">
+  <h4>Suspend user</h4>
+  <p>User: alice@example.com</p>
+  <p>Reason: Policy violation / temporary review</p>
+  <a class="btn danger" href="{{ url_for('ui.dashboard', role='admin') }}">Suspend Account</a>
+</div>
+{% endblock %}

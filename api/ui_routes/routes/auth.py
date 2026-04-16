@@ -1,5 +1,3 @@
-from html import escape
-
 from flask import redirect, request, session, url_for
 from utils.supabase_client import get_supabase_client
 
@@ -47,31 +45,8 @@ def login():
             except Exception as exc:
                 error = _format_login_error(exc)
 
-    error_block = ""
-    if error:
-        error_block = f"<p style='color:#b91c1c; margin:0 0 12px 0;'>{escape(error)}</p>"
-
-    info_block = ""
-    if info and not error:
-        info_block = f"<p style='color:#166534; margin:0 0 12px 0;'>{escape(info)}</p>"
-
-    body = f"""
-    <div class='hero'>
-      <h1>Log In</h1>
-      <p class='muted'>Sign in to access user and admin pages.</p>
-    </div>
-    <div class='card'>
-      {info_block}
-      {error_block}
-      <form method='POST' action='/ui/login?next={escape(next_path)}' style='display:flex; flex-direction:column; gap:10px; max-width:420px;'>
-      <input type='email' name='email' placeholder='Email' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='password' name='password' placeholder='Password' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <button type='submit' class='btn' style='border:none; cursor:pointer; width:max-content; margin-top:0;'>Log In</button>
-      </form>
-      <p class='muted' style='margin-top:12px;'>Need an account? <a href='/ui/register?next={escape(next_path)}'>Register here</a></p>
-    </div>
-    """
-    return render_page("Log In", "guest", guest_nav(), body)
+    return render_page("Log In", "guest", guest_nav(), "auth/login.html",
+                       error=error, info=info, next_path=next_path)
 
 
 @ui_bp.route("/register", methods=["GET", "POST"])
@@ -110,28 +85,8 @@ def register():
             except Exception as exc:
                 error = f"Could not register: {exc}"
 
-    error_block = ""
-    if error:
-        error_block = f"<p style='color:#b91c1c; margin:0 0 12px 0;'>{escape(error)}</p>"
-
-    body = f"""
-    <div class='hero'>
-      <h1>Register</h1>
-      <p class='muted'>Create an account to access calendar management.</p>
-    </div>
-    <div class='card'>
-      {error_block}
-      <form method='POST' action='/ui/register?next={escape(next_path)}' style='display:flex; flex-direction:column; gap:10px; max-width:420px;'>
-      <input type='text' name='name' placeholder='Name (optional)' style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='email' name='email' placeholder='Email' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='password' name='password' placeholder='Password' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <input type='password' name='confirm_password' placeholder='Confirm password' required style='padding:10px; border:1px solid #cbd5e1; border-radius:10px;' />
-      <button type='submit' class='btn' style='border:none; cursor:pointer; width:max-content; margin-top:0;'>Create Account</button>
-      </form>
-      <p class='muted' style='margin-top:12px;'>Already have an account? <a href='/ui/login?next={escape(next_path)}'>Log in</a></p>
-    </div>
-    """
-    return render_page("Register", "guest", guest_nav(), body)
+    return render_page("Register", "guest", guest_nav(), "auth/register.html",
+                       error=error, next_path=next_path)
 
 
 @ui_bp.route("/logout")

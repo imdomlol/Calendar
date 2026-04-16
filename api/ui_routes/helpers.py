@@ -2,7 +2,6 @@ import os
 import subprocess
 import calendar as pycalendar
 from datetime import date
-from html import escape
 from functools import wraps
 
 from flask import render_template, request, redirect, session, url_for
@@ -130,7 +129,7 @@ def _google_oauth_config():
     return client_id, client_secret
 
 
-def _build_month_preview(events_for_calendar):
+def build_month_preview_data(events_for_calendar):
     today = date.today()
     year = today.year
     month = today.month
@@ -153,27 +152,15 @@ def _build_month_preview(events_for_calendar):
         if event_year == year and event_month == month:
             event_counts[event_day] = event_counts.get(event_day, 0) + 1
 
-    header = "<tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr>"
-    rows = ""
+    weeks = []
     for week in pycalendar.monthcalendar(year, month):
-        cells = ""
-        for day in week:
-            if day == 0:
-                cells += "<td> </td>"
-                continue
-            count = event_counts.get(day, 0)
-            if count:
-                cells += (
-                    f"<td><strong>{day}</strong><br />"
-                    f"<span class='muted' style='font-size:12px;'>{count} event(s)</span></td>"
-                )
-            else:
-                cells += f"<td>{day}</td>"
-        rows += f"<tr>{cells}</tr>"
+        row = [{"day": d if d != 0 else None, "count": event_counts.get(d, 0)} for d in week]
+        weeks.append(row)
 
-    month_label = f"{pycalendar.month_name[month]} {year}"
-    table_html = f"<table>{header}{rows}</table>"
-    return month_label, table_html
+    return {
+        "month_label": f"{pycalendar.month_name[month]} {year}",
+        "weeks": weeks,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -225,14 +212,21 @@ def admin_nav():
 # Page renderer
 # ---------------------------------------------------------------------------
 
-def render_page(title, role, nav, body):
-    return render_template(
-        "base.html",
-        title=title,
-        role=role,
-        nav=nav,
-        features_nav=features_nav(),
-        body=body,
-        ui_user=_ui_user(),
-        build_info=BUILD_INFO,
-    )
+def render_page(title, role, nav, template, **ctx):
+    return render_template(template, title=title, role=role, nav=nav, **ctx)
+
+
+# ---------------------------------------------------------------------------
+# Blueprint context processor — injects globals into every template
+# ---------------------------------------------------------------------------
+
+from api.ui_routes import ui_bp  # noqa: E402 — imported here to avoid circular import
+
+
+@ui_bp.context_processor
+def _inject_globals():
+    return {
+        "ui_user": _ui_user(),
+        "features_nav": features_nav(),
+        "build_info": BUILD_INFO,
+    }

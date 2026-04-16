@@ -30,7 +30,7 @@
     </aside>
 
     <main class="content">
-      {{ body|safe }}
+      {% block content %}{% endblock %}
     </main>
   </div>
   {% if build_info %}

@@ -1,7 +1,6 @@
 import json
 import urllib.error
 import urllib.request as urlreq
-from html import escape
 
 from flask import redirect, request, session, url_for
 
@@ -24,32 +23,11 @@ def settings_page():
     role = "user" if user else "guest"
     nav = user_nav() if user else guest_nav()
 
+    if not user:
+        return render_page("Settings", role, nav, "settings/guest.html")
+
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
-
-    banner = ""
-    if message:
-        banner_bg = "#dcfce7" if status == "ok" else "#fee2e2"
-        banner_border = "#86efac" if status == "ok" else "#fca5a5"
-        banner = (
-            f"<div class='card' style='margin-bottom:16px; background:{banner_bg}; border-color:{banner_border};'>"
-            f"<p>{escape(message)}</p></div>"
-        )
-
-    if not user:
-        body = """
-        <div class='hero'>
-          <h1>Settings</h1>
-          <p class='muted'>Sign in to manage external calendar connections.</p>
-        </div>
-        <div class='card'>
-          <h4>External Connections</h4>
-          <p>Google API connection controls are available after login.</p>
-          <a class='btn' href='/ui/login?next=/ui/settings'>Log In</a>
-        </div>
-        """
-        return render_page("Settings", role, nav, body)
-
     user_id = user.get("id")
     google_rows = []
 
@@ -69,61 +47,9 @@ def settings_page():
     except Exception as exc:
         status = "error"
         message = f"Failed to load external connections: {exc}"
-        banner = (
-            "<div class='card' style='margin-bottom:16px; background:#fee2e2; border-color:#fca5a5;'>"
-            f"<p>{escape(message)}</p></div>"
-        )
 
-    rows_html = ""
-    for row in google_rows:
-        external_id = escape(str(row.get("id") or ""))
-        provider = escape(str(row.get("provider") or "google"))
-        url_value = escape(str(row.get("url") or ""))
-        rows_html += f"""
-        <tr>
-          <td>{provider}</td>
-          <td>{url_value}</td>
-          <td>{external_id}</td>
-          <td style='display:flex; gap:8px;'>
-          <form method='POST' action='/ui/settings/external/google/{external_id}/sync' style='margin:0;'>
-            <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Pull Events</button>
-          </form>
-          <form method='POST' action='/ui/settings/external/google/{external_id}/push' style='margin:0;'>
-            <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Push Events</button>
-          </form>
-          <form method='POST' action='/ui/settings/external/google/{external_id}/disconnect' style='margin:0;'>
-            <button type='submit' class='btn danger' style='border:none; cursor:pointer; margin-top:0;'>Disconnect</button>
-          </form>
-          </td>
-        </tr>
-        """
-
-    if not rows_html:
-        rows_html = "<tr><td colspan='4' class='muted'>No Google connections yet.</td></tr>"
-
-    body = """
-    <div class='hero'>
-      <h1>Settings</h1>
-      <p class='muted'>Manage external calendar providers connected to your account.</p>
-    </div>
-    """ + banner + """
-    <div class='grid'>
-      <div class='card'>
-      <div class='pill'>External Connections</div>
-      <h4>Google API</h4>
-      <p class='muted'>Sign in with Google to connect your account. No manual token entry required.</p>
-      <a class='btn' href='/ui/settings/external/google/login'>Log in with Google</a>
-      </div>
-      <div class='card'>
-      <h4>Connected Google Accounts</h4>
-      <table>
-        <tr><th>Provider</th><th>URL</th><th>Connection ID</th><th>Action</th></tr>
-        """ + rows_html + """
-      </table>
-      </div>
-    </div>
-    """
-    return render_page("Settings", role, nav, body)
+    return render_page("Settings", role, nav, "settings/auth.html",
+                       status=status, message=message, google_rows=google_rows)
 
 
 @ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])

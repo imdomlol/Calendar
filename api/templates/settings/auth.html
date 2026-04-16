@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Settings</h1>
+  <p class="muted">Manage external calendar providers connected to your account.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="grid">
+  <div class="card">
+    <div class="pill">External Connections</div>
+    <h4>Google API</h4>
+    <p class="muted">Sign in with Google to connect your account. No manual token entry required.</p>
+    <a class="btn" href="{{ url_for('ui.settings_login_google') }}">Log in with Google</a>
+  </div>
+  <div class="card">
+    <h4>Connected Google Accounts</h4>
+    <table>
+      <tr><th>Provider</th><th>URL</th><th>Connection ID</th><th>Action</th></tr>
+      {% if google_rows %}
+        {% for row in google_rows %}
+          <tr>
+            <td>{{ row.provider }}</td>
+            <td>{{ row.url }}</td>
+            <td>{{ row.id }}</td>
+            <td style="display:flex; gap:8px;">
+              <form method="POST"
+                    action="{{ url_for('ui.settings_sync_google', external_id=row.id) }}"
+                    style="margin:0;">
+                <button type="submit" class="btn"
+                        style="border:none; cursor:pointer; margin-top:0;">Pull Events</button>
+              </form>
+              <form method="POST"
+                    action="{{ url_for('ui.settings_push_google', external_id=row.id) }}"
+                    style="margin:0;">
+                <button type="submit" class="btn"
+                        style="border:none; cursor:pointer; margin-top:0;">Push Events</button>
+              </form>
+              <form method="POST"
+                    action="{{ url_for('ui.settings_disconnect_google', external_id=row.id) }}"
+                    style="margin:0;">
+                <button type="submit" class="btn danger"
+                        style="border:none; cursor:pointer; margin-top:0;">Disconnect</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="4" class="muted">No Google connections yet.</td></tr>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}
