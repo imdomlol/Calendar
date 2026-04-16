@@ -402,7 +402,12 @@ def settings_push_google(external_id):
         def _as_time_obj(ts):
             ts = str(ts)
             if "T" in ts or len(ts) > 10:
-                return {"dateTime": ts, "timeZone": "UTC"}
+                # Strip UTC offset — timestamps from datetime-local inputs are local
+                # time stored as UTC-labelled. Omitting timeZone tells Google to use
+                # the calendar's own timezone, which places the event at the correct
+                # local time the user entered.
+                clean_ts = ts.replace("+00:00", "").replace("Z", "")
+                return {"dateTime": clean_ts}
             return {"date": ts}
 
         api_url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
