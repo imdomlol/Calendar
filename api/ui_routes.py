@@ -263,7 +263,10 @@ def settings_page():
       <td>{provider}</td>
       <td>{url_value}</td>
       <td>{external_id}</td>
-      <td>
+      <td style='display:flex; gap:8px;'>
+      <form method='POST' action='/ui/settings/external/google/{external_id}/sync' style='margin:0;'>
+        <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Pull Events</button>
+      </form>
       <form method='POST' action='/ui/settings/external/google/{external_id}/disconnect' style='margin:0;'>
         <button type='submit' class='btn danger' style='border:none; cursor:pointer; margin-top:0;'>Disconnect</button>
       </form>
@@ -297,6 +300,99 @@ def settings_page():
   </div>
   """
   return render_page("Settings", role, nav, body)
+
+
+@ui_bp.route("/settings/external/google/<external_id>/sync", methods=["POST"])
+@ui_login_required
+def settings_sync_google(external_id):
+  user_id = _ui_user()["id"]
+
+  try:
+    supabase = _get_ui_supabase_client()
+
+    ext_result = (
+      supabase.table("externals")
+      .select("id, access_token")
+      .eq("id", external_id)
+      .eq("user_id", user_id)
+      .single()
+      .execute()
+    )
+
+    if not ext_result.data:
+      return redirect(url_for("ui.settings_page", status="error", message="Connection not found."))
+
+    access_token = ext_result.data.get("access_token")
+    if not access_token:
+      return redirect(url_for(
+        "ui.settings_page",
+        status="error",
+        message="No access token stored. Please reconnect Google.",
+      ))
+
+    import json
+    import urllib.request as urlreq
+    import urllib.error
+
+    api_url = (
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+      "?maxResults=250&orderBy=startTime&singleEvents=true"
+    )
+    req = urlreq.Request(api_url, headers={"Authorization": f"Bearer {access_token}"})
+    try:
+      with urlreq.urlopen(req) as resp:
+        google_events = json.loads(resp.read().decode("utf-8")).get("items", [])
+    except urllib.error.HTTPError as exc:
+      if exc.code == 401:
+        return redirect(url_for(
+          "ui.settings_page",
+          status="error",
+          message="Google access token expired. Please reconnect Google to refresh it.",
+        ))
+      raise
+
+    # Find or create the local sync calendar
+    cal_result = (
+      supabase.table("calendars")
+      .select("id")
+      .eq("owner_id", user_id)
+      .eq("name", "Google Calendar (Synced)")
+      .execute()
+    )
+    if cal_result.data:
+      calendar_id = str(cal_result.data[0]["id"])
+    else:
+      new_cal = (
+        supabase.table("calendars")
+        .insert({"name": "Google Calendar (Synced)", "owner_id": user_id, "member_ids": [user_id], "events": []})
+        .execute()
+      )
+      calendar_id = str(new_cal.data[0]["id"])
+
+    inserted = 0
+    for g_event in google_events:
+      start = g_event.get("start", {})
+      end = g_event.get("end", {})
+      payload = {
+        "title": g_event.get("summary") or "Untitled Event",
+        "calendar_ids": [calendar_id],
+        "owner_id": user_id,
+        "start_timestamp": start.get("dateTime") or start.get("date"),
+        "end_timestamp": end.get("dateTime") or end.get("date"),
+      }
+      if g_event.get("description"):
+        payload["description"] = g_event["description"]
+      supabase.table("events").insert(payload).execute()
+      inserted += 1
+
+    return redirect(url_for(
+      "ui.settings_page",
+      status="ok",
+      message=f"Pulled {inserted} events into 'Google Calendar (Synced)'.",
+    ))
+
+  except Exception as exc:
+    return redirect(url_for("ui.settings_page", status="error", message=f"Sync failed: {exc}"))
 
 
 @ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])
