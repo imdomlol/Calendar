@@ -88,6 +88,9 @@ def settings_page():
           <form method='POST' action='/ui/settings/external/google/{external_id}/sync' style='margin:0;'>
             <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Pull Events</button>
           </form>
+          <form method='POST' action='/ui/settings/external/google/{external_id}/push' style='margin:0;'>
+            <button type='submit' class='btn' style='border:none; cursor:pointer; margin-top:0;'>Push Events</button>
+          </form>
           <form method='POST' action='/ui/settings/external/google/{external_id}/disconnect' style='margin:0;'>
             <button type='submit' class='btn danger' style='border:none; cursor:pointer; margin-top:0;'>Disconnect</button>
           </form>
@@ -155,7 +158,7 @@ def settings_login_google():
     oauth = OAuth2Session(
         client_id,
         redirect_uri=redirect_uri,
-        scope=["https://www.googleapis.com/auth/calendar.readonly"],
+        scope=["https://www.googleapis.com/auth/calendar.events"],
     )
     authorization_url, state = oauth.authorization_url(
         "https://accounts.google.com/o/oauth2/auth",
@@ -342,6 +345,117 @@ def settings_sync_google(external_id):
 
     except Exception as exc:
         return redirect(url_for("ui.settings_page", status="error", message=f"Sync failed: {exc}"))
+
+
+@ui_bp.route("/settings/external/google/<external_id>/push", methods=["POST"])
+@ui_login_required
+def settings_push_google(external_id):
+    user_id = _ui_user()["id"]
+
+    try:
+        supabase = _get_ui_supabase_client()
+
+        ext_result = (
+            supabase.table("externals")
+            .select("id, access_token")
+            .eq("id", external_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+
+        if not ext_result.data:
+            return redirect(url_for("ui.settings_page", status="error", message="Connection not found."))
+
+        access_token = ext_result.data.get("access_token")
+        if not access_token:
+            return redirect(url_for(
+                "ui.settings_page",
+                status="error",
+                message="No access token stored. Please reconnect Google.",
+            ))
+
+        # Fetch all local calendars except the synced import calendar
+        cals_result = (
+            supabase.table("calendars")
+            .select("id")
+            .eq("owner_id", user_id)
+            .neq("name", "Google Calendar (Synced)")
+            .execute()
+        )
+        calendar_ids = [str(c["id"]) for c in (cals_result.data or [])]
+
+        if not calendar_ids:
+            return redirect(url_for("ui.settings_page", status="ok", message="No local calendars to push."))
+
+        events_result = (
+            supabase.table("events")
+            .select("title, description, start_timestamp, end_timestamp")
+            .overlaps("calendar_ids", calendar_ids)
+            .execute()
+        )
+        local_events = events_result.data or []
+
+        if not local_events:
+            return redirect(url_for("ui.settings_page", status="ok", message="No local events found to push."))
+
+        def _as_time_obj(ts):
+            ts = str(ts)
+            if "T" in ts or len(ts) > 10:
+                return {"dateTime": ts, "timeZone": "UTC"}
+            return {"date": ts}
+
+        api_url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        pushed = 0
+        for event in local_events:
+            start_ts = event.get("start_timestamp")
+            if not start_ts:
+                continue  # Google Calendar requires a start time
+
+            end_ts = event.get("end_timestamp") or start_ts
+            body = {
+                "summary": event.get("title") or "Untitled Event",
+                "start": _as_time_obj(start_ts),
+                "end": _as_time_obj(end_ts),
+            }
+            if event.get("description"):
+                body["description"] = event["description"]
+
+            req = urlreq.Request(
+                api_url,
+                data=json.dumps(body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            try:
+                with urlreq.urlopen(req) as resp:
+                    resp.read()
+                pushed += 1
+            except urllib.error.HTTPError as exc:
+                if exc.code in (401, 403):
+                    return redirect(url_for(
+                        "ui.settings_page",
+                        status="error",
+                        message=(
+                            "Google denied write access. "
+                            "Please disconnect and reconnect Google to grant calendar write permission."
+                        ),
+                    ))
+                raise
+
+        return redirect(url_for(
+            "ui.settings_page",
+            status="ok",
+            message=f"Pushed {pushed} events to Google Calendar.",
+        ))
+
+    except Exception as exc:
+        return redirect(url_for("ui.settings_page", status="error", message=f"Push failed: {exc}"))
 
 
 @ui_bp.route("/settings/external/google/<external_id>/disconnect", methods=["POST"])
