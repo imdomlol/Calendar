@@ -1,6 +1,4 @@
 import os
-import base64
-import hashlib
 import calendar as pycalendar
 from datetime import date
 from html import escape
@@ -350,13 +348,13 @@ def settings_login_google():
   )
   flow.redirect_uri = redirect_uri
 
-  code_verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("ascii")
   authorization_url, state = flow.authorization_url(
     access_type="offline",
     include_granted_scopes="true",
     prompt="consent",
-    code_verifier=code_verifier,
   )
+
+  code_verifier = flow.oauth2session.code_verifier or ""
   session["google_oauth_state"] = state
   session["google_oauth_code_verifier"] = code_verifier
   session["google_oauth_redirect_uri"] = redirect_uri
