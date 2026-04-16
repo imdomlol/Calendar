@@ -399,15 +399,27 @@ def settings_push_google(external_id):
         if not local_events:
             return redirect(url_for("ui.settings_page", status="ok", message="No local events found to push."))
 
+        # Fetch the user's primary calendar timezone so pushed events land at
+        # the correct local time (timestamps are stored as local time labelled UTC).
+        cal_tz = "UTC"
+        try:
+            tz_req = urlreq.Request(
+                "https://www.googleapis.com/calendar/v3/calendars/primary",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            with urlreq.urlopen(tz_req) as tz_resp:
+                cal_tz = json.loads(tz_resp.read().decode("utf-8")).get("timeZone", "UTC")
+        except Exception:
+            pass  # fall back to UTC if the lookup fails
+
         def _as_time_obj(ts):
             ts = str(ts)
             if "T" in ts or len(ts) > 10:
-                # Strip UTC offset — timestamps from datetime-local inputs are local
-                # time stored as UTC-labelled. Omitting timeZone tells Google to use
-                # the calendar's own timezone, which places the event at the correct
-                # local time the user entered.
+                # Strip the UTC label — the stored value is local time that
+                # PostgreSQL tagged as +00:00. Send it without an offset and
+                # let Google place it in the calendar's own timezone.
                 clean_ts = ts.replace("+00:00", "").replace("Z", "")
-                return {"dateTime": clean_ts}
+                return {"dateTime": clean_ts, "timeZone": cal_tz}
             return {"date": ts}
 
         api_url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
