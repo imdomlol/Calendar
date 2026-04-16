@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('ui.static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><a href="{{ url_for('ui.brand_home') }}">Calendar System</a></div>
+    <div class="top-links">
+      {% if ui_user %}
+      <a href="{{ url_for('ui.logout') }}">Log Out</a>
+      {% else %}
+      <a href="{{ url_for('ui.login', next=request.path) }}">Log In</a>
+      <a href="{{ url_for('ui.register', next=request.path) }}">Register</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div>
+      {% for item in features_nav %}
+        <a href="{{ item.href }}">{{ item.label }}</a>
+      {% endfor %}
+      </div>
+      <a class="settings-btn" href="{{ url_for('ui.settings_page') }}" aria-label="Settings">&#9881;</a>
+    </aside>
+
+    <main class="content">
+      {{ body|safe }}
+    </main>
+  </div>
+</body>
+</html>
