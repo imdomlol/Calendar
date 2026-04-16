@@ -1,4 +1,5 @@
 import os
+import subprocess
 import calendar as pycalendar
 from datetime import date
 from html import escape
@@ -6,6 +7,38 @@ from functools import wraps
 
 from flask import render_template, request, redirect, session, url_for
 from utils.supabase_client import get_supabase_client
+
+
+# ---------------------------------------------------------------------------
+# Build info (computed once at startup)
+# ---------------------------------------------------------------------------
+
+def _compute_build_info():
+    # Vercel injects these env vars at deploy time
+    sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "").strip()
+    short_sha = sha[:7] if sha else ""
+    commit_date = ""
+
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h|||%cd", "--date=format:%b %d %Y, %H:%M"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split("|||", 1)
+            if not short_sha:
+                short_sha = parts[0]
+            if len(parts) > 1:
+                commit_date = parts[1]
+    except Exception:
+        pass
+
+    if not short_sha and not commit_date:
+        return None
+    return {"sha": short_sha, "date": commit_date}
+
+
+BUILD_INFO = _compute_build_info()
 
 
 # ---------------------------------------------------------------------------
@@ -201,4 +234,5 @@ def render_page(title, role, nav, body):
         features_nav=features_nav(),
         body=body,
         ui_user=_ui_user(),
+        build_info=BUILD_INFO,
     )
