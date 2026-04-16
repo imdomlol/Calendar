@@ -1,8 +1,11 @@
+import secrets
+
 from flask import redirect, request, url_for
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
     _get_ui_supabase_client,
+    _resolve_app_base_url,
     _ui_user,
     placeholder_externals,
     placeholder_friends,
@@ -27,22 +30,51 @@ def manage_calendars():
     message = (request.args.get("message") or "").strip()
 
     records = []
+    has_guest_link_fields = True
+    supabase = None
     try:
         supabase = _get_ui_supabase_client()
         result = (
             supabase.table("calendars")
-            .select("id, name, owner_id, member_ids, events")
+            .select("id, name, owner_id, member_ids, events, guest_link_token, guest_link_role, guest_link_active")
             .eq("owner_id", owner_id)
             .order("age_timestamp", desc=False)
             .execute()
         )
         records = result.data or []
     except Exception as exc:
-        status = "error"
-        message = f"Failed to load calendars: {exc}"
+        if "guest_link_" in str(exc):
+            has_guest_link_fields = False
+            try:
+                if not supabase:
+                    supabase = _get_ui_supabase_client()
+                fallback = (
+                    supabase.table("calendars")
+                    .select("id, name, owner_id, member_ids, events")
+                    .eq("owner_id", owner_id)
+                    .order("age_timestamp", desc=False)
+                    .execute()
+                )
+                records = fallback.data or []
+                status = "error"
+                message = (
+                    "Guest links are unavailable because calendar guest-link columns are missing. "
+                    "Add guest_link_token, guest_link_role, and guest_link_active to calendars."
+                )
+            except Exception as fallback_exc:
+                status = "error"
+                message = f"Failed to load calendars: {fallback_exc}"
+        else:
+            status = "error"
+            message = f"Failed to load calendars: {exc}"
 
     return render_page("Manage Calendars", "user", user_nav(), "user/calendars.html",
-                       status=status, message=message, owner_id=owner_id, calendars=records)
+                       status=status,
+                       message=message,
+                       owner_id=owner_id,
+                       calendars=records,
+                       has_guest_link_fields=has_guest_link_fields,
+                       app_base_url=_resolve_app_base_url())
 
 
 @ui_bp.route("/user/calendars/create", methods=["POST"])
@@ -76,6 +108,104 @@ def create_calendar():
             "ui.manage_calendars",
             status="error",
             message=f"Failed to create calendar: {exc}",
+        ))
+
+
+@ui_bp.route("/user/calendars/<calendar_id>/guest-link", methods=["POST"])
+@ui_login_required
+def create_guest_link(calendar_id):
+    user_id = _ui_user()["id"]
+    role = (request.form.get("role") or "viewer").strip().lower()
+    if role not in {"viewer", "editor"}:
+        role = "viewer"
+
+    token = secrets.token_urlsafe(24)
+
+    try:
+        supabase = _get_ui_supabase_client()
+        ownership = (
+            supabase.table("calendars")
+            .select("id")
+            .eq("id", calendar_id)
+            .eq("owner_id", user_id)
+            .execute()
+        )
+        if not ownership.data:
+            return redirect(url_for(
+                "ui.manage_calendars",
+                status="error",
+                message="You do not have access to that calendar.",
+            ))
+
+        supabase.table("calendars").update({
+            "guest_link_token": token,
+            "guest_link_role": role,
+            "guest_link_active": True,
+        }).eq("id", calendar_id).eq("owner_id", user_id).execute()
+
+        guest_url = f"{_resolve_app_base_url()}{url_for('ui.public_calendar', token=token)}"
+        return redirect(url_for(
+            "ui.manage_calendars",
+            status="ok",
+            message=f"Guest link generated ({role}). URL: {guest_url}",
+        ))
+    except Exception as exc:
+        text = str(exc)
+        if "guest_link_" in text:
+            text = (
+                "Guest-link columns are missing on calendars. "
+                "Add guest_link_token, guest_link_role, and guest_link_active first."
+            )
+        return redirect(url_for(
+            "ui.manage_calendars",
+            status="error",
+            message=f"Failed to generate guest link: {text}",
+        ))
+
+
+@ui_bp.route("/user/calendars/<calendar_id>/guest-link/revoke", methods=["POST"])
+@ui_login_required
+def revoke_guest_link(calendar_id):
+    user_id = _ui_user()["id"]
+
+    try:
+        supabase = _get_ui_supabase_client()
+        ownership = (
+            supabase.table("calendars")
+            .select("id")
+            .eq("id", calendar_id)
+            .eq("owner_id", user_id)
+            .execute()
+        )
+        if not ownership.data:
+            return redirect(url_for(
+                "ui.manage_calendars",
+                status="error",
+                message="You do not have access to that calendar.",
+            ))
+
+        supabase.table("calendars").update({
+            "guest_link_token": None,
+            "guest_link_role": None,
+            "guest_link_active": False,
+        }).eq("id", calendar_id).eq("owner_id", user_id).execute()
+
+        return redirect(url_for(
+            "ui.manage_calendars",
+            status="ok",
+            message="Guest link revoked successfully.",
+        ))
+    except Exception as exc:
+        text = str(exc)
+        if "guest_link_" in text:
+            text = (
+                "Guest-link columns are missing on calendars. "
+                "Add guest_link_token, guest_link_role, and guest_link_active first."
+            )
+        return redirect(url_for(
+            "ui.manage_calendars",
+            status="error",
+            message=f"Failed to revoke guest link: {text}",
         ))
 
 
