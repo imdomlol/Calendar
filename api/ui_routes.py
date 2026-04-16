@@ -321,38 +321,29 @@ def settings_login_google():
     ))
 
   try:
-    from google_auth_oauthlib.flow import Flow
+    from requests_oauthlib import OAuth2Session
   except Exception as exc:
     return redirect(url_for(
       "ui.settings_page",
       status="error",
-      message=f"Google OAuth dependency error: {exc}",
+      message=f"OAuth dependency error: {exc}",
     ))
 
   app_base_url = _resolve_app_base_url()
-
   redirect_uri = f"{app_base_url}{url_for('ui.settings_google_callback')}"
 
-  flow = Flow.from_client_config(
-    {
-      "web": {
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-      }
-    },
-    scopes=[
-      "https://www.googleapis.com/auth/calendar.readonly",
-    ],
+  oauth = OAuth2Session(
+    client_id,
+    redirect_uri=redirect_uri,
+    scope=["https://www.googleapis.com/auth/calendar.readonly"],
   )
-  flow.redirect_uri = redirect_uri
 
-  authorization_url, state = flow.authorization_url(
+  authorization_url, state = oauth.authorization_url(
+    "https://accounts.google.com/o/oauth2/auth",
     access_type="offline",
-    include_granted_scopes="true",
     prompt="consent",
   )
+
   session["google_oauth_state"] = state
   session["google_oauth_redirect_uri"] = redirect_uri
 
@@ -378,14 +369,14 @@ def settings_google_callback():
   redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
 
   try:
-    from google_auth_oauthlib.flow import Flow
+    from requests_oauthlib import OAuth2Session
   except Exception as exc:
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
     return redirect(url_for(
       "ui.settings_page",
       status="error",
-      message=f"Google OAuth dependency error: {exc}",
+      message=f"OAuth dependency error: {exc}",
     ))
 
   if not client_id or not client_secret or not redirect_uri:
@@ -398,23 +389,17 @@ def settings_google_callback():
     ))
 
   try:
-    flow = Flow.from_client_config(
-      {
-        "web": {
-          "client_id": client_id,
-          "client_secret": client_secret,
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-        }
-      },
-      scopes=[
-        "https://www.googleapis.com/auth/calendar.readonly",
-      ],
+    oauth = OAuth2Session(
+      client_id,
+      redirect_uri=redirect_uri,
       state=expected_state,
     )
-    flow.redirect_uri = redirect_uri
-    flow.fetch_token(authorization_response=request.url)
-    credentials = flow.credentials
+    token = oauth.fetch_token(
+      "https://oauth2.googleapis.com/token",
+      client_secret=client_secret,
+      authorization_response=request.url,
+    )
+    credentials = token
 
     user_id = _ui_user()["id"]
     provider_url = "https://www.googleapis.com/calendar/v3"
@@ -431,10 +416,10 @@ def settings_google_callback():
 
     if existing.data:
       update_payload = {}
-      if credentials.token:
-        update_payload["access_token"] = credentials.token
-      if credentials.refresh_token:
-        update_payload["refresh_token"] = credentials.refresh_token
+      if credentials.get("access_token"):
+        update_payload["access_token"] = credentials.get("access_token")
+      if credentials.get("refresh_token"):
+        update_payload["refresh_token"] = credentials.get("refresh_token")
       if update_payload:
         (
           supabase.table("externals")
@@ -450,10 +435,10 @@ def settings_google_callback():
         "provider": "google",
         "url": provider_url,
       }
-      if credentials.token:
-        payload["access_token"] = credentials.token
-      if credentials.refresh_token:
-        payload["refresh_token"] = credentials.refresh_token
+      if credentials.get("access_token"):
+        payload["access_token"] = credentials.get("access_token")
+      if credentials.get("refresh_token"):
+        payload["refresh_token"] = credentials.get("refresh_token")
 
       result = supabase.table("externals").insert(payload).execute()
       created = (result.data or [{}])[0]
