@@ -353,10 +353,7 @@ def settings_login_google():
     include_granted_scopes="true",
     prompt="consent",
   )
-
-  code_verifier = flow.oauth2session.code_verifier or ""
   session["google_oauth_state"] = state
-  session["google_oauth_code_verifier"] = code_verifier
   session["google_oauth_redirect_uri"] = redirect_uri
 
   return redirect(authorization_url)
@@ -371,7 +368,6 @@ def settings_google_callback():
   if not expected_state or returned_state != expected_state:
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
-    session.pop("google_oauth_code_verifier", None)
     return redirect(url_for(
       "ui.settings_page",
       status="error",
@@ -380,14 +376,12 @@ def settings_google_callback():
 
   client_id, client_secret = _google_oauth_config()
   redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
-  code_verifier = (session.get("google_oauth_code_verifier") or "").strip()
 
   try:
     from google_auth_oauthlib.flow import Flow
   except Exception as exc:
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
-    session.pop("google_oauth_code_verifier", None)
     return redirect(url_for(
       "ui.settings_page",
       status="error",
@@ -397,7 +391,6 @@ def settings_google_callback():
   if not client_id or not client_secret or not redirect_uri:
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
-    session.pop("google_oauth_code_verifier", None)
     return redirect(url_for(
       "ui.settings_page",
       status="error",
@@ -420,7 +413,7 @@ def settings_google_callback():
       state=expected_state,
     )
     flow.redirect_uri = redirect_uri
-    flow.fetch_token(authorization_response=request.url, code_verifier=code_verifier)
+    flow.fetch_token(authorization_response=request.url)
     credentials = flow.credentials
 
     user_id = _ui_user()["id"]
@@ -469,7 +462,6 @@ def settings_google_callback():
 
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
-    session.pop("google_oauth_code_verifier", None)
     return redirect(url_for(
       "ui.settings_page",
       status="ok",
@@ -478,7 +470,6 @@ def settings_google_callback():
   except Exception as exc:
     session.pop("google_oauth_state", None)
     session.pop("google_oauth_redirect_uri", None)
-    session.pop("google_oauth_code_verifier", None)
     return redirect(url_for(
       "ui.settings_page",
       status="error",
