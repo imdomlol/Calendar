@@ -4,7 +4,7 @@
 
 **Version:** 1.1 (Draft)
 
-**Date:** 2026-04-15
+**Date:** 4-15-2026
 
 ---
 
@@ -58,9 +58,7 @@
 
 ### 1.1 Purpose
 
-This document explains what the Calendar project does today, what behavior is required, and how we confirm that behavior works.
-
-It is written for readers inside and outside the team, including readers who are new to backend APIs.
+This document explains what the Calendar project does today, and what is required.
 
 ### 1.2 Scope
 
@@ -68,13 +66,32 @@ Calendar is a web-based calendar management system with two user-facing surfaces
 - A JSON API for client applications
 - A server-rendered web UI under `/ui/*`
 
-Current implemented scope includes:
-- User registration and login through Supabase authentication
-- Protected API routes using Bearer token authentication
-- Calendar create/list/delete behavior
-- Event create/list/edit/delete behavior
-- External calendar record create/list/delete behavior
-- Authenticated user profile endpoint (`/me`)
+Goal features include:
+- Pull Data Calendars
+- Push Data Calendars
+- Link External Calendars
+- Unlink External Calendars
+- Create Calendar
+- Remove Calendar
+- Create Event
+- Edit Event
+- Remove Event
+- Add Member to calendar
+- Remove Member from calendar
+- Allow a guest to view a public calendar
+- Allow a guest to view a public event
+- Add Friend
+- Remove Friend
+- View Friends
+- Remove Account
+- Admin suspend user account
+- Admin view system logs
+- Admin send sys-wide notification
+- Admin unlink all external calendars for a user
+
+Current implemented features include:
+- Create Calendar
+- Remove Calendar
 
 ### 1.3 Definitions, Acronyms, Abbreviations
 
