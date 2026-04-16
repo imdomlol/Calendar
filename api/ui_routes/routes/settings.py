@@ -158,7 +158,10 @@ def settings_login_google():
     oauth = OAuth2Session(
         client_id,
         redirect_uri=redirect_uri,
-        scope=["https://www.googleapis.com/auth/calendar.events"],
+        scope=[
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/calendar.readonly",
+        ],
     )
     authorization_url, state = oauth.authorization_url(
         "https://accounts.google.com/o/oauth2/auth",
