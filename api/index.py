@@ -1,9 +1,8 @@
-from http.server import BaseHTTPRequestHandler
-import json
 import os
 from supabase import create_client
-from auth_routes import auth_bp
-from flask import Flask, request, g, abort
+from api.auth_routes import auth_bp
+from api.ui_routes import ui_bp
+from flask import Flask, request, g, abort, redirect, url_for
 from utils.auth import require_auth
 from utils.supabase_client import get_supabase_client
 from models.calendar import Calendar
@@ -13,6 +12,7 @@ from flask_cors import CORS
 from utils.auth import require_auth
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-ui-secret-key")
 
 supabase = create_client(
     os.environ["SUPABASE_URL"],
@@ -20,10 +20,11 @@ supabase = create_client(
 )
 
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(ui_bp, url_prefix="/ui")
 
 @app.route("/")
 def welcome():
-    return {"message": "Welcome to the API!"}
+    return redirect(url_for("ui.home"))
 
 # Configure CORS to allow frontend
 CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
@@ -241,38 +242,3 @@ def me():
             "authenticated": True,
         },
     }, 200
-
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"message": "Welcome to the API!"}')
-
-    def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(body)
-            name = data.get("name")
-            email = data.get("email")
-
-            if not name or not email:
-                self.send_response(400)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"error": "Name and email are required"}')
-                return
-
-            response = supabase.table("users").insert({"name": name, "email": email}).execute()
-            self.send_response(201)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(b'{"message": "User created successfully"}')
-
-        except Exception as e:
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
