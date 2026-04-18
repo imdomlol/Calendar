@@ -27,7 +27,6 @@ class User:
         DECRIPTION
 '''
 
-
 # Imports
 from typing import Any # 
 from utils.supabase_client import get_supabase_client # 
@@ -49,6 +48,7 @@ class User:
         self.events = None #Event() # title, supabase_client, calendar_ids, owner_id, description, start_timestamp, end_timestamp
         self.externals = None #External() # 
         self.email = email
+        self.friends: list[str] = [] # Friends list
     '''
     Other self.variables: [ REMOVED ]
         self.owner_id = owner_id # Calendar's id.
@@ -85,16 +85,22 @@ class User:
     .execute() = Perform the actions above, otherwise the line would just be saved.
     '''
 
-    def function3(): # 
-        return None
+    def add_friend(self, user_id: str) -> None:
+		if user_id == self.id:
+			raise ValueError("User cannot add themselves as a friend")
+		if user_id in self.friends:
+			raise ValueError(f"User {user_id} is already a friend.")
+		self.friends.append(user_id)
     '''
-    COMMENTS ABOUT THE FUNCTION.
+    Adds user_id to the friends list
     '''
     
-    def function4(): # 
-        return None
+    def remove_friend(self, user_id: str) -> None:
+		if user_id not in self.friends:
+			raise ValueError(f"User {user_id} is not in the friends list")
+		self.friends.remove(user_id)
     '''
-    COMMENTS ABOUT THE FUNCTION.
+    Removes user_id from the friends list
     '''
     
     def function5(): # 

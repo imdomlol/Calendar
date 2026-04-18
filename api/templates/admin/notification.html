@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+  <h1>System-Wide Notifications</h1>
+  <p class="muted">Draft and send a notification to every user.</p>
+</div>
+<div class="card">
+  <h4>Notification Composer</h4>
+  <p>Title: Platform Maintenance</p>
+  <p>Message: The system will be unavailable tonight from 11PM to 12AM.</p>
+  <a class="btn warning" href="{{ url_for('ui.dashboard', role='admin') }}">Send Notification</a>
+</div>
+{% endblock %}

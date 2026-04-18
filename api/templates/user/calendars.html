@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Manage Calendars</h1>
+  <p class="muted">Create calendars in Supabase. Owner id is auto-filled from your login.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="margin-bottom:16px;">
+  <h4>Available actions</h4>
+  <p>Create Calendar &bull; Add Member &bull; Remove Member &bull; Manage Events &bull; Remove Calendar</p>
+  <p class="muted">Logged in as owner id: {{ owner_id }}</p>
+  <form method="POST" action="{{ url_for('ui.create_calendar') }}"
+        style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+    <input type="text" name="name" placeholder="Calendar name (required)" required
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
+    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Create Calendar</button>
+  </form>
+</div>
+
+{% if calendars %}
+  <div class="grid">
+    {% for cal in calendars %}
+      <div class="card">
+        <div class="pill">Calendar #{{ cal.id }}</div>
+        <h4>{{ cal.name or "Untitled" }}</h4>
+        <p>Owner ID: {{ cal.owner_id }}</p>
+        <p>Events linked: {{ (cal.events or [])|length }}</p>
+        <p><strong>Actions:</strong> Create event, edit event, delete event, manage members, remove calendar</p>
+        <ul>
+          {% if cal.member_ids %}
+            {% for m in cal.member_ids %}
+              <li>{{ m }}</li>
+            {% endfor %}
+          {% else %}
+            <li>No members yet</li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <h3>No calendars found</h3>
+    <p>No calendar rows exist for this owner id yet.</p>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Your Calendar</h1>
+  <p class="muted">Select a calendar to preview it on your home page.</p>
+</div>
+
+{{ status_banner("error", status_message) }}
+
+<div class="card" style="margin-bottom:16px;">
+  <form method="GET" action="{{ url_for('ui.home') }}"
+        style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <label for="calendar_id"><strong>Calendar:</strong></label>
+    <select id="calendar_id" name="calendar_id"
+            style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; min-width:240px;">
+      {% for cal in calendars %}
+        <option value="{{ cal.id }}"
+                {% if cal.id|string == selected_calendar_id %}selected{% endif %}>
+          {{ cal.name or "Untitled Calendar" }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Switch</button>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="pill">Preview</div>
+    <h4>{{ calendar_name }}</h4>
+    <p class="muted">{{ calendar_data.month_label }}</p>
+    <table>
+      <tr>
+        <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+      </tr>
+      {% for week in calendar_data.weeks %}
+        <tr>
+          {% for cell in week %}
+            <td>
+              {% if cell.day %}
+                {% if cell.count %}
+                  <strong>{{ cell.day }}</strong><br />
+                  <span class="muted" style="font-size:12px;">{{ cell.count }} event(s)</span>
+                {% else %}
+                  {{ cell.day }}
+                {% endif %}
+              {% else %}
+                &nbsp;
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
