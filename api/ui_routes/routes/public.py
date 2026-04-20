@@ -20,7 +20,7 @@ def _resolve_shared_calendar(token):
             "id, name, owner_id, guest_link_token, guest_link_role, guest_link_active"
         )
         .eq("guest_link_token", token)
-        .eq("guest_link_active", True)
+        .eq("guest_link_active", "true")
         .limit(1)
         .execute()
     )
