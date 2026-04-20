@@ -1,3 +1,4 @@
+# settings page and Google Calendar integration routes (OAuth connect, sync pull, event push, disconnect)
 import json
 import urllib.error
 import urllib.request as urlreq
@@ -15,6 +16,11 @@ from api.ui_routes.helpers import (
     ui_login_required,
     user_nav,
 )
+
+
+def _clear_oauth_session():
+    session.pop("google_oauth_state", None)
+    session.pop("google_oauth_redirect_uri", None)
 
 
 @ui_bp.route("/settings")
@@ -41,17 +47,26 @@ def settings_page():
         )
         all_rows = result.data or []
         google_rows = [
-            row for row in all_rows
+            row
+            for row in all_rows
             if "google" in str(row.get("provider") or "").lower()
         ]
     except Exception as exc:
         status = "error"
         message = f"Failed to load external connections: {exc}"
 
-    return render_page("Settings", role, nav, "settings/auth.html",
-                       status=status, message=message, google_rows=google_rows)
+    return render_page(
+        "Settings",
+        role,
+        nav,
+        "settings/auth.html",
+        status=status,
+        message=message,
+        google_rows=google_rows,
+    )
 
 
+# --- google OAuth ---
 @ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])
 @ui_login_required
 def settings_connect_google():
@@ -61,22 +76,31 @@ def settings_connect_google():
 @ui_bp.route("/settings/external/google/login")
 @ui_login_required
 def settings_login_google():
+    """Starts the Google OAuth2 flow; saves state and redirect URI in session for the callback to verify."""
     client_id, client_secret = _google_oauth_config()
 
     if not client_id or not client_secret:
-        return redirect(url_for(
-            "ui.settings_page",
-            status="error",
-            message=(
-                "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and "
-                "GOOGLE_CLIENT_SECRET in your environment."
-            ),
-        ))
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message=(
+                    "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and "
+                    "GOOGLE_CLIENT_SECRET in your environment."
+                ),
+            )
+        )
 
     try:
         from requests_oauthlib import OAuth2Session
-    except Exception as exc:
-        return redirect(url_for("ui.settings_page", status="error", message=f"OAuth dependency error: {exc}"))
+    except ImportError as exc:
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message=f"OAuth dependency error: {exc}",
+            )
+        )
 
     app_base_url = _resolve_app_base_url()
     redirect_uri = f"{app_base_url}{url_for('ui.settings_google_callback')}"
@@ -89,6 +113,7 @@ def settings_login_google():
             "https://www.googleapis.com/auth/calendar.readonly",
         ],
     )
+    # offline access_type gets a refresh token; prompt="consent" ensures it is always returned
     authorization_url, state = oauth.authorization_url(
         "https://accounts.google.com/o/oauth2/auth",
         access_type="offline",
@@ -103,17 +128,20 @@ def settings_login_google():
 @ui_bp.route("/settings/external/google/callback")
 @ui_login_required
 def settings_google_callback():
+    """Completes the OAuth2 flow after Google redirects back; upserts the access and refresh tokens in externals."""
     expected_state = (session.get("google_oauth_state") or "").strip()
     returned_state = (request.args.get("state") or "").strip()
 
+    # state param prevents CSRF by matching what we stored in session before the redirect
     if not expected_state or returned_state != expected_state:
-        session.pop("google_oauth_state", None)
-        session.pop("google_oauth_redirect_uri", None)
-        return redirect(url_for(
-            "ui.settings_page",
-            status="error",
-            message="Google OAuth state check failed. Please try again.",
-        ))
+        _clear_oauth_session()
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message="Google OAuth state check failed. Please try again.",
+            )
+        )
 
     client_id, client_secret = _google_oauth_config()
     redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
@@ -121,21 +149,29 @@ def settings_google_callback():
     try:
         from requests_oauthlib import OAuth2Session
     except Exception as exc:
-        session.pop("google_oauth_state", None)
-        session.pop("google_oauth_redirect_uri", None)
-        return redirect(url_for("ui.settings_page", status="error", message=f"OAuth dependency error: {exc}"))
+        _clear_oauth_session()
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message=f"OAuth dependency error: {exc}",
+            )
+        )
 
     if not client_id or not client_secret or not redirect_uri:
-        session.pop("google_oauth_state", None)
-        session.pop("google_oauth_redirect_uri", None)
-        return redirect(url_for(
-            "ui.settings_page",
-            status="error",
-            message="Google OAuth session expired. Please start again.",
-        ))
+        _clear_oauth_session()
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message="Google OAuth session expired. Please start again.",
+            )
+        )
 
     try:
-        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, state=expected_state)
+        oauth = OAuth2Session(
+            client_id, redirect_uri=redirect_uri, state=expected_state
+        )
         credentials = oauth.fetch_token(
             "https://oauth2.googleapis.com/token",
             client_secret=client_secret,
@@ -155,6 +191,7 @@ def settings_google_callback():
             .execute()
         )
 
+        # upsert: refresh tokens on an existing connection or create a new one
         if existing.data:
             update_payload = {}
             if credentials.get("access_token"):
@@ -162,7 +199,9 @@ def settings_google_callback():
             if credentials.get("refresh_token"):
                 update_payload["refresh_token"] = credentials["refresh_token"]
             if update_payload:
-                supabase.table("externals").update(update_payload).eq("id", existing.data[0]["id"]).eq("user_id", user_id).execute()
+                supabase.table("externals").update(update_payload).eq(
+                    "id", existing.data[0]["id"]
+                ).eq("user_id", user_id).execute()
             message = "Google connection refreshed."
         else:
             payload = {"user_id": user_id, "provider": "google", "url": provider_url}
@@ -174,23 +213,25 @@ def settings_google_callback():
             created_id = (result.data or [{}])[0].get("id") or "new row"
             message = f"Google connection created (id: {created_id})."
 
-        session.pop("google_oauth_state", None)
-        session.pop("google_oauth_redirect_uri", None)
+        _clear_oauth_session()
         return redirect(url_for("ui.settings_page", status="ok", message=message))
 
     except Exception as exc:
-        session.pop("google_oauth_state", None)
-        session.pop("google_oauth_redirect_uri", None)
-        return redirect(url_for(
-            "ui.settings_page",
-            status="error",
-            message=f"Failed Google OAuth connection: {exc}",
-        ))
+        _clear_oauth_session()
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message=f"Failed Google OAuth connection: {exc}",
+            )
+        )
 
 
+# --- google sync ---
 @ui_bp.route("/settings/external/google/<external_id>/sync", methods=["POST"])
 @ui_login_required
 def settings_sync_google(external_id):
+    """Pulls up to 250 events from the user's primary Google Calendar into a local synced calendar."""
     user_id = _ui_user()["id"]
 
     try:
@@ -206,31 +247,41 @@ def settings_sync_google(external_id):
         )
 
         if not ext_result.data:
-            return redirect(url_for("ui.settings_page", status="error", message="Connection not found."))
+            return redirect(
+                url_for(
+                    "ui.settings_page", status="error", message="Connection not found."
+                )
+            )
 
         access_token = ext_result.data.get("access_token")
         if not access_token:
-            return redirect(url_for(
-                "ui.settings_page",
-                status="error",
-                message="No access token stored. Please reconnect Google.",
-            ))
+            return redirect(
+                url_for(
+                    "ui.settings_page",
+                    status="error",
+                    message="No access token stored. Please reconnect Google.",
+                )
+            )
 
         api_url = (
             "https://www.googleapis.com/calendar/v3/calendars/primary/events"
             "?maxResults=250&orderBy=startTime&singleEvents=true"
         )
-        req = urlreq.Request(api_url, headers={"Authorization": f"Bearer {access_token}"})
+        req = urlreq.Request(
+            api_url, headers={"Authorization": f"Bearer {access_token}"}
+        )
         try:
             with urlreq.urlopen(req) as resp:
                 google_events = json.loads(resp.read().decode("utf-8")).get("items", [])
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
-                return redirect(url_for(
-                    "ui.settings_page",
-                    status="error",
-                    message="Google access token expired. Please reconnect Google to refresh it.",
-                ))
+                return redirect(
+                    url_for(
+                        "ui.settings_page",
+                        status="error",
+                        message="Google access token expired. Please reconnect Google to refresh it.",
+                    )
+                )
             raise
 
         cal_result = (
@@ -240,17 +291,25 @@ def settings_sync_google(external_id):
             .eq("name", "Google Calendar (Synced)")
             .execute()
         )
+        # find or create the dedicated import calendar so synced events stay separate from local ones
         if cal_result.data:
             calendar_id = str(cal_result.data[0]["id"])
         else:
             new_cal = (
                 supabase.table("calendars")
-                .insert({"name": "Google Calendar (Synced)", "owner_id": user_id, "member_ids": [user_id], "events": []})
+                .insert(
+                    {
+                        "name": "Google Calendar (Synced)",
+                        "owner_id": user_id,
+                        "member_ids": [user_id],
+                        "events": [],
+                    }
+                )
                 .execute()
             )
             calendar_id = str(new_cal.data[0]["id"])
 
-        inserted = 0
+        payloads = []
         for g_event in google_events:
             start = g_event.get("start", {})
             end = g_event.get("end", {})
@@ -263,22 +322,30 @@ def settings_sync_google(external_id):
             }
             if g_event.get("description"):
                 payload["description"] = g_event["description"]
-            supabase.table("events").insert(payload).execute()
-            inserted += 1
+            payloads.append(payload)
 
-        return redirect(url_for(
-            "ui.settings_page",
-            status="ok",
-            message=f"Pulled {inserted} events into 'Google Calendar (Synced)'.",
-        ))
+        if payloads:
+            supabase.table("events").insert(payloads).execute()
+        inserted = len(payloads)
+
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="ok",
+                message=f"Pulled {inserted} events into 'Google Calendar (Synced)'.",
+            )
+        )
 
     except Exception as exc:
-        return redirect(url_for("ui.settings_page", status="error", message=f"Sync failed: {exc}"))
+        return redirect(
+            url_for("ui.settings_page", status="error", message=f"Sync failed: {exc}")
+        )
 
 
 @ui_bp.route("/settings/external/google/<external_id>/push", methods=["POST"])
 @ui_login_required
 def settings_push_google(external_id):
+    """Pushes all local non-synced events to the user's primary Google Calendar one at a time."""
     user_id = _ui_user()["id"]
 
     try:
@@ -294,17 +361,23 @@ def settings_push_google(external_id):
         )
 
         if not ext_result.data:
-            return redirect(url_for("ui.settings_page", status="error", message="Connection not found."))
+            return redirect(
+                url_for(
+                    "ui.settings_page", status="error", message="Connection not found."
+                )
+            )
 
         access_token = ext_result.data.get("access_token")
         if not access_token:
-            return redirect(url_for(
-                "ui.settings_page",
-                status="error",
-                message="No access token stored. Please reconnect Google.",
-            ))
+            return redirect(
+                url_for(
+                    "ui.settings_page",
+                    status="error",
+                    message="No access token stored. Please reconnect Google.",
+                )
+            )
 
-        # Fetch all local calendars except the synced import calendar
+        # excludes the "Google Calendar (Synced)" import calendar to avoid pushing synced events back
         cals_result = (
             supabase.table("calendars")
             .select("id")
@@ -315,7 +388,13 @@ def settings_push_google(external_id):
         calendar_ids = [str(c["id"]) for c in (cals_result.data or [])]
 
         if not calendar_ids:
-            return redirect(url_for("ui.settings_page", status="ok", message="No local calendars to push."))
+            return redirect(
+                url_for(
+                    "ui.settings_page",
+                    status="ok",
+                    message="No local calendars to push.",
+                )
+            )
 
         events_result = (
             supabase.table("events")
@@ -326,10 +405,15 @@ def settings_push_google(external_id):
         local_events = events_result.data or []
 
         if not local_events:
-            return redirect(url_for("ui.settings_page", status="ok", message="No local events found to push."))
+            return redirect(
+                url_for(
+                    "ui.settings_page",
+                    status="ok",
+                    message="No local events found to push.",
+                )
+            )
 
-        # Fetch the user's primary calendar timezone so pushed events land at
-        # the correct local time (timestamps are stored as local time labelled UTC).
+        # fetch the primary calendar timezone so events land at the correct local time on Google's end
         cal_tz = "UTC"
         try:
             tz_req = urlreq.Request(
@@ -337,16 +421,18 @@ def settings_push_google(external_id):
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             with urlreq.urlopen(tz_req) as tz_resp:
-                cal_tz = json.loads(tz_resp.read().decode("utf-8")).get("timeZone", "UTC")
+                cal_tz = json.loads(tz_resp.read().decode("utf-8")).get(
+                    "timeZone", "UTC"
+                )
         except Exception:
             pass  # fall back to UTC if the lookup fails
 
+        # converts a stored timestamp to a Google Calendar time object with the correct timezone applied
         def _as_time_obj(ts):
             ts = str(ts)
             if "T" in ts or len(ts) > 10:
-                # Strip the UTC label — the stored value is local time that
-                # PostgreSQL tagged as +00:00. Send it without an offset and
-                # let Google place it in the calendar's own timezone.
+                # timestamps are local time that PostgreSQL tagged as +00:00; strip the offset so Google
+                # applies the calendar timezone instead of treating the value as UTC
                 clean_ts = ts.replace("+00:00", "").replace("Z", "")
                 return {"dateTime": clean_ts, "timeZone": cal_tz}
             return {"date": ts}
@@ -357,6 +443,7 @@ def settings_push_google(external_id):
             "Content-Type": "application/json",
         }
 
+        # TODO: pushing one event per request is slow; Google Calendar batch API would help here
         pushed = 0
         for event in local_events:
             start_ts = event.get("start_timestamp")
@@ -384,26 +471,33 @@ def settings_push_google(external_id):
                 pushed += 1
             except urllib.error.HTTPError as exc:
                 if exc.code in (401, 403):
-                    return redirect(url_for(
-                        "ui.settings_page",
-                        status="error",
-                        message=(
-                            "Google denied write access. "
-                            "Please disconnect and reconnect Google to grant calendar write permission."
-                        ),
-                    ))
+                    return redirect(
+                        url_for(
+                            "ui.settings_page",
+                            status="error",
+                            message=(
+                                "Google denied write access. "
+                                "Please disconnect and reconnect Google to grant calendar write permission."
+                            ),
+                        )
+                    )
                 raise
 
-        return redirect(url_for(
-            "ui.settings_page",
-            status="ok",
-            message=f"Pushed {pushed} events to Google Calendar.",
-        ))
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="ok",
+                message=f"Pushed {pushed} events to Google Calendar.",
+            )
+        )
 
     except Exception as exc:
-        return redirect(url_for("ui.settings_page", status="error", message=f"Push failed: {exc}"))
+        return redirect(
+            url_for("ui.settings_page", status="error", message=f"Push failed: {exc}")
+        )
 
 
+# --- disconnect ---
 @ui_bp.route("/settings/external/google/<external_id>/disconnect", methods=["POST"])
 @ui_login_required
 def settings_disconnect_google(external_id):
@@ -421,21 +515,37 @@ def settings_disconnect_google(external_id):
 
         rows = existing.data or []
         if not rows:
-            return redirect(url_for("ui.settings_page", status="error", message="Connection not found."))
+            return redirect(
+                url_for(
+                    "ui.settings_page", status="error", message="Connection not found."
+                )
+            )
 
         if "google" not in str(rows[0].get("provider") or "").lower():
-            return redirect(url_for(
-                "ui.settings_page",
-                status="error",
-                message="Only Google connections can be removed from this section.",
-            ))
+            return redirect(
+                url_for(
+                    "ui.settings_page",
+                    status="error",
+                    message="Only Google connections can be removed from this section.",
+                )
+            )
 
-        supabase.table("externals").delete().eq("id", external_id).eq("user_id", user_id).execute()
-        return redirect(url_for("ui.settings_page", status="ok", message="Google connection disconnected."))
+        supabase.table("externals").delete().eq("id", external_id).eq(
+            "user_id", user_id
+        ).execute()
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="ok",
+                message="Google connection disconnected.",
+            )
+        )
 
     except Exception as exc:
-        return redirect(url_for(
-            "ui.settings_page",
-            status="error",
-            message=f"Failed to disconnect Google connection: {exc}",
-        ))
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="error",
+                message=f"Failed to disconnect Google connection: {exc}",
+            )
+        )

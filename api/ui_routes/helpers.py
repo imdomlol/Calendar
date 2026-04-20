@@ -1,12 +1,12 @@
+import calendar as pycalendar
 import os
 import subprocess
-import calendar as pycalendar
-from datetime import date
+from datetime import date, datetime
 from functools import wraps
 
-from flask import render_template, request, redirect, session, url_for
-from utils.supabase_client import get_supabase_client
+from flask import redirect, render_template, request, session, url_for
 
+from utils.supabase_client import get_supabase_client
 
 # ---------------------------------------------------------------------------
 # Build info (computed once at startup)
@@ -134,23 +134,15 @@ def build_month_preview_data(events_for_calendar):
     year = today.year
     month = today.month
 
-    event_counts = {}
+    event_counts: dict[int, int] = {}
     for event in events_for_calendar:
-        start_timestamp = str(event.get("start_timestamp") or "")
-        if len(start_timestamp) < 10:
-            continue
-        date_part = start_timestamp[:10]
-        parts = date_part.split("-")
-        if len(parts) != 3:
-            continue
+        raw = str(event.get("start_timestamp") or "")
         try:
-            event_year = int(parts[0])
-            event_month = int(parts[1])
-            event_day = int(parts[2])
+            dt = datetime.fromisoformat(raw[:19])
         except ValueError:
             continue
-        if event_year == year and event_month == month:
-            event_counts[event_day] = event_counts.get(event_day, 0) + 1
+        if dt.year == year and dt.month == month:
+            event_counts[dt.day] = event_counts.get(dt.day, 0) + 1
 
     weeks = []
     for week in pycalendar.monthcalendar(year, month):

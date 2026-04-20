@@ -1,3 +1,4 @@
+# unauthenticated routes for shared calendars; anyone with a valid guest token can view or edit depending on role
 from flask import redirect, request, url_for
 
 from api.ui_routes import ui_bp
@@ -6,10 +7,13 @@ from utils.supabase_client import get_supabase_client
 
 
 def _resolve_shared_calendar(token):
+    """Looks up a calendar by its guest link token; returns None if not found or inactive."""
     supabase = get_supabase_client()
     result = (
         supabase.table("calendars")
-        .select("id, name, owner_id, guest_link_token, guest_link_role, guest_link_active")
+        .select(
+            "id, name, owner_id, guest_link_token, guest_link_role, guest_link_active"
+        )
         .eq("guest_link_token", token)
         .eq("guest_link_active", True)
         .limit(1)
@@ -22,6 +26,7 @@ def _resolve_shared_calendar(token):
 
 
 def _load_calendar_events(calendar_id):
+    """Loads all events for a calendar; overlaps queries the calendar_ids array column in Supabase."""
     supabase = get_supabase_client()
     result = (
         supabase.table("events")
@@ -33,15 +38,43 @@ def _load_calendar_events(calendar_id):
     return result.data or []
 
 
+def _get_editor_calendar(token):
+    """Returns (calendar_row, None) if token resolves to an editor link, else (None, redirect_response)."""
+    calendar_row = _resolve_shared_calendar(token)
+    if not calendar_row:
+        return None, redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message="Share link is invalid or inactive.",
+            )
+        )
+    role = str(calendar_row.get("guest_link_role") or "viewer").lower()
+    if role != "editor":
+        return None, redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message="This share link is view-only.",
+            )
+        )
+    return calendar_row, None
+
+
 @ui_bp.route("/guest/<token>")
 def public_calendar(token):
+    """Renders the shared calendar page; status and message are passed via query params after form submissions."""
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
 
     try:
         calendar_row = _resolve_shared_calendar(token)
         if not calendar_row:
-            return render_page("Shared Calendar", "guest", guest_nav(), "public/not_found.html")
+            return render_page(
+                "Shared Calendar", "guest", guest_nav(), "public/not_found.html"
+            )
 
         events = _load_calendar_events(calendar_row.get("id"))
         role = str(calendar_row.get("guest_link_role") or "viewer").lower()
@@ -71,28 +104,28 @@ def public_calendar(token):
 
 @ui_bp.route("/guest/<token>/events/create", methods=["POST"])
 def public_create_event(token):
+    """Creates an event on the shared calendar; rejects the request if the token is view-only or invalid."""
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
     end_timestamp = (request.form.get("end_timestamp") or "").strip()
 
     if not title:
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="error",
-            message="Title is required.",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message="Title is required.",
+            )
+        )
 
     try:
-        calendar_row = _resolve_shared_calendar(token)
-        if not calendar_row:
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="Share link is invalid or inactive."))
+        calendar_row, err = _get_editor_calendar(token)
+        if err:
+            return err
 
-        role = str(calendar_row.get("guest_link_role") or "viewer").lower()
-        if role != "editor":
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="This share link is view-only."))
-
+        # owner_id is set to the calendar owner so events appear under the right account
         payload = {
             "title": title,
             "owner_id": calendar_row.get("owner_id"),
@@ -108,40 +141,42 @@ def public_create_event(token):
         supabase = get_supabase_client()
         supabase.table("events").insert(payload).execute()
 
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="ok",
-            message="Event created successfully.",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="ok",
+                message="Event created successfully.",
+            )
+        )
     except Exception as exc:
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="error",
-            message=f"Failed to create event: {exc}",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message=f"Failed to create event: {exc}",
+            )
+        )
 
 
 @ui_bp.route("/guest/<token>/events/<event_id>/edit", methods=["POST"])
 def public_edit_event(token, event_id):
+    """Updates a specific event on the shared calendar; verifies the event belongs to this calendar before writing."""
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
     end_timestamp = (request.form.get("end_timestamp") or "").strip()
 
     try:
-        calendar_row = _resolve_shared_calendar(token)
-        if not calendar_row:
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="Share link is invalid or inactive."))
-
-        role = str(calendar_row.get("guest_link_role") or "viewer").lower()
-        if role != "editor":
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="This share link is view-only."))
+        calendar_row, err = _get_editor_calendar(token)
+        if err:
+            return err
 
         calendar_id = str(calendar_row.get("id"))
         supabase = get_supabase_client()
 
+        # confirm the event is part of this calendar before allowing edits
         existing = (
             supabase.table("events")
             .select("id")
@@ -151,49 +186,57 @@ def public_edit_event(token, event_id):
             .execute()
         )
         if not (existing.data or []):
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="Event not found for this shared calendar."))
+            return redirect(
+                url_for(
+                    "ui.public_calendar",
+                    token=token,
+                    status="error",
+                    message="Event not found for this shared calendar.",
+                )
+            )
 
-        updates = {}
+        updates = {
+            # always include optional fields so guests can clear them by submitting blank
+            "description": description or None,
+            "start_timestamp": start_timestamp or None,
+            "end_timestamp": end_timestamp or None,
+        }
         if title:
             updates["title"] = title
-        updates["description"] = description if description else None
-        updates["start_timestamp"] = start_timestamp if start_timestamp else None
-        updates["end_timestamp"] = end_timestamp if end_timestamp else None
-
-        if not updates:
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="No event changes were provided."))
 
         supabase.table("events").update(updates).eq("id", event_id).execute()
 
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="ok",
-            message="Event updated successfully.",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="ok",
+                message="Event updated successfully.",
+            )
+        )
     except Exception as exc:
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="error",
-            message=f"Failed to update event: {exc}",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message=f"Failed to update event: {exc}",
+            )
+        )
 
 
 @ui_bp.route("/guest/<token>/events/<event_id>/delete", methods=["POST"])
 def public_delete_event(token, event_id):
+    """Deletes a specific event from the shared calendar; confirms the event belongs here before removing."""
     try:
-        calendar_row = _resolve_shared_calendar(token)
-        if not calendar_row:
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="Share link is invalid or inactive."))
-
-        role = str(calendar_row.get("guest_link_role") or "viewer").lower()
-        if role != "editor":
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="This share link is view-only."))
+        calendar_row, err = _get_editor_calendar(token)
+        if err:
+            return err
 
         calendar_id = str(calendar_row.get("id"))
         supabase = get_supabase_client()
 
+        # confirm the event is part of this calendar before deleting
         existing = (
             supabase.table("events")
             .select("id")
@@ -203,20 +246,31 @@ def public_delete_event(token, event_id):
             .execute()
         )
         if not (existing.data or []):
-            return redirect(url_for("ui.public_calendar", token=token, status="error", message="Event not found for this shared calendar."))
+            return redirect(
+                url_for(
+                    "ui.public_calendar",
+                    token=token,
+                    status="error",
+                    message="Event not found for this shared calendar.",
+                )
+            )
 
         supabase.table("events").delete().eq("id", event_id).execute()
 
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="ok",
-            message="Event deleted successfully.",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="ok",
+                message="Event deleted successfully.",
+            )
+        )
     except Exception as exc:
-        return redirect(url_for(
-            "ui.public_calendar",
-            token=token,
-            status="error",
-            message=f"Failed to delete event: {exc}",
-        ))
+        return redirect(
+            url_for(
+                "ui.public_calendar",
+                token=token,
+                status="error",
+                message=f"Failed to delete event: {exc}",
+            )
+        )

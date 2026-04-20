@@ -1,21 +1,23 @@
+# authentication routes for login, registration, and logout; stores a minimal user profile in the Flask session
 from flask import redirect, request, session, url_for
-from utils.supabase_client import get_supabase_client
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
     _format_login_error,
     _resolve_app_base_url,
-    _ui_user,
     guest_nav,
     render_page,
 )
+from utils.supabase_client import get_supabase_client
 
 
+# handles both GET (show form) and POST (attempt Supabase auth); on success stores user id and token in session
 @ui_bp.route("/login", methods=["GET", "POST"])
 def login():
     error = ""
     info = (request.args.get("info") or "").strip()
     next_path = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+    # open redirect guard: only allow relative paths
     if not next_path.startswith("/"):
         next_path = url_for("ui.dashboard", role="user")
 
@@ -29,6 +31,7 @@ def login():
             try:
                 supabase = get_supabase_client()
                 result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                # supabase auth returns attribute objects, not plain dicts, so use getattr
                 user_obj = getattr(result, "user", None)
                 session_obj = getattr(result, "session", None)
                 user_id = getattr(user_obj, "id", None)
@@ -49,10 +52,12 @@ def login():
                        error=error, info=info, next_path=next_path)
 
 
+# creates a Supabase account and redirects to login; the account requires email verification before it works
 @ui_bp.route("/register", methods=["GET", "POST"])
 def register():
     error = ""
     next_path = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+    # open redirect guard: only allow relative paths
     if not next_path.startswith("/"):
         next_path = url_for("ui.dashboard", role="user")
 
@@ -70,6 +75,7 @@ def register():
             try:
                 supabase = get_supabase_client()
                 app_base_url = _resolve_app_base_url()
+                # tells Supabase where to redirect the user after they click the verification link
                 options = {"email_redirect_to": f"{app_base_url}{url_for('ui.login')}"}
                 if name:
                     options["data"] = {"name": name}
