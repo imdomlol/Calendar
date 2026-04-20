@@ -11,11 +11,9 @@
     <div class="brand">Calendar System</div>
   </div>
 
-  <div class="layout">
-    <main class="content" style="margin-left:0; width:100%;">
-      {% block content %}{% endblock %}
-    </main>
-  </div>
+  <main style="padding:24px 32px; max-width:1000px; margin:0 auto;">
+    {% block content %}{% endblock %}
+  </main>
 
   {% if build_info %}
   <footer class="build-footer">
