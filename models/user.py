@@ -51,3 +51,7 @@ class User:
 
     def __repr__(self) -> str:
         return f"<User: {self.display_name}>"
+    
+    def get_friend_ids(self) -> list[str]:
+        """Returns a list of friend user IDs."""
+        return list(self.friends)
