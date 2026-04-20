@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('ui.static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">Calendar System</div>
+  </div>
+
+  <div class="layout">
+    <main class="content" style="margin-left:0; width:100%;">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% if build_info %}
+  <footer class="build-footer">
+    Build:
+    <code>{{ build_info.sha }}</code>
+    {% if build_info.date %}&nbsp;&middot;&nbsp;{{ build_info.date }}{% endif %}
+  </footer>
+  {% endif %}
+</body>
+</html>
