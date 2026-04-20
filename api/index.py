@@ -25,6 +25,7 @@ supabase = supabaseClient
 calApp.register_blueprint(auth_bp, url_prefix="/api/auth")
 calApp.register_blueprint(ui_bp, url_prefix="/ui")
 _featureFlag = False
+app = calApp
 
 
 @calApp.route("/")
