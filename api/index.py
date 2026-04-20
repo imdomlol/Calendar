@@ -29,15 +29,19 @@ _featureFlag = False
 
 @calApp.route("/")
 def welcome():
-    # redirect to UI home page
-    return redirect(url_for("ui.home"))
+    # this is the main entry point for the whole app
+    # anyone who visits / gets sent to the ui home page
+    # we use url_for to get the url so we dont hardcode the path
+    # ui.home is the name of the home route in the ui blueprint
+    homeTarget = url_for("ui.home") #get the url for home
+    # now send the browser there
+    return redirect(homeTarget)
 
-# Configure CORS?
+# Configure CORS
 CORS(calApp, resources={r"/api/*": {"origins": "https://your-domain.com"}})
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-log = logger
+calLog = logging.getLogger(__name__)
 
 
 def logRequest():
@@ -48,7 +52,7 @@ def logRequest():
 @calApp.before_request
 def log_request():
     # logs every incoming request method and path
-    logger.info(f"{request.method} {request.path}")
+    calLog.info(f"{request.method} {request.path}")
     #userAgent = request.headers.get('User-Agent')
     # optimize: could add request timing here
 
@@ -64,7 +68,7 @@ def log_response(response):
     # then we return resp so flask can send it back 
     resp = response 
     statusCode = resp.status_code #get the code
-    log.info(f"Response: {statusCode}")
+    calLog.info(f"Response: {statusCode}")
     return resp
 
 
@@ -78,14 +82,14 @@ def badRequest(e):
     Handles 400 bad request errors.
     Logs the error and returns a JSON error response.
     """
-    log.error(f"bad request: {e.description}")
+    calLog.error(f"bad request: {e.description}")
     #log.error(f"bad request: {e.description}")
     return {"error": e.description}, 400
 
 @calApp.errorhandler(401)
 def unauthorized(e):
     # handles 401 unauthorized errors
-    log.error(f"unauthorized: {e.description}")
+    calLog.error(f"unauthorized: {e.description}")
     return {"error": "unauthorized"}, 401
 
 
@@ -93,18 +97,18 @@ def unauthorized(e):
 @calApp.errorhandler(403)
 def forbiddenError(e):
     '''Handles 403 forbidden errors.'''
-    log.error(f"forbidden: {e.description}")
+    calLog.error(f"forbidden: {e.description}")
     return {"error": "forbidden"}, 403
 
 @calApp.errorhandler(404)
 def not_found(e):
-    log.error(f"Not found: {e.description}")
+    calLog.error(f"Not found: {e.description}")
     return {"error": "Not found"}, 404
 
 
 @calApp.errorhandler(500)
 def serverError(e):
-    log.error(f"error: {str(e)}")
+    calLog.error(f"error: {str(e)}")
     return {"error": "error"}, 500
 
 
@@ -347,10 +351,13 @@ def deleteExternal(external_id):
 @require_auth
 def getMe():
     user = getattr(g, "user", {})
-    #return user info for the current session
+    uid = user.get("id") or user.get("sub") #get the user id
+    userEmail = user.get("email")
+    userRole = user.get("role")
+    lastSignIn = user.get("last_sign_in_at")
     return {
-        "id": user.get("id") or user.get("sub"),
-        "email": user.get("email"),
-        "role": user.get("role"),
-        "last_sign_in_at": user.get("last_sign_in_at"),
+        "id": uid,
+        "email": userEmail,
+        "role": userRole,
+        "last_sign_in_at": lastSignIn,
     }, 200

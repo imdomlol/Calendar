@@ -1,7 +1,5 @@
-# unauthenticated routes for shared calendars; anyone with a valid guest token can view or edit depending on role
-import logging
 import traceback
-
+import logging
 from flask import redirect, request, url_for
 
 from api.ui_routes import ui_bp
@@ -12,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_shared_calendar(token):
-    """Looks up a calendar by its guest link token; returns None if not found or inactive."""
     supabase = get_supabase_client()
     result = (
         supabase.table("calendars")
@@ -31,8 +28,13 @@ def _resolve_shared_calendar(token):
 
 
 def _load_calendar_events(calendar_id):
-    """Loads all events for a calendar; overlaps queries the calendar_ids array column in Supabase."""
+    # this function gets all the events for a calendar
+    # we pass in calendar_id to know which one to look for
+    # first get the supabase client so we can connect to the database
     supabase = get_supabase_client()
+    # now we query the events table
+    # overlaps checks if the calendar_ids array contains our id
+    # we also order by start time so events appear in order
     result = (
         supabase.table("events")
         .select("id, title, description, start_timestamp, end_timestamp")
@@ -40,13 +42,18 @@ def _load_calendar_events(calendar_id):
         .order("start_timestamp", desc=False)
         .execute()
     )
-    return result.data or []
+    # result.data is the list or None so we use or [] to always get a list back
+    eventsData = result.data or []
+    # return the events list to whoever called this
+    return eventsData
+
+
 
 
 def _get_editor_calendar(token):
-    """Returns (calendar_row, None) if token resolves to an editor link, else (None, redirect_response)."""
-    calendar_row = _resolve_shared_calendar(token)
-    if not calendar_row:
+    # look up the calendar for this token
+    calRow = _resolve_shared_calendar(token)
+    if not calRow:
         return None, redirect(
             url_for(
                 "ui.public_calendar",
@@ -55,8 +62,8 @@ def _get_editor_calendar(token):
                 message="Share link is invalid or inactive.",
             )
         )
-    role = str(calendar_row.get("guest_link_role") or "viewer").lower()
-    if role != "editor":
+    role = str(calRow.get("guest_link_role") or "viewer").lower()
+    if role != "editor": #only editor links can make changes
         return None, redirect(
             url_for(
                 "ui.public_calendar",
@@ -65,12 +72,10 @@ def _get_editor_calendar(token):
                 message="This share link is view-only.",
             )
         )
-    return calendar_row, None
-
+    return calRow, None
 
 @ui_bp.route("/guest/<token>")
 def public_calendar(token):
-    """Renders the shared calendar page; status and message are passed via query params after form submissions."""
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
 
@@ -83,7 +88,7 @@ def public_calendar(token):
 
         events = _load_calendar_events(calendar_row.get("id"))
         role = str(calendar_row.get("guest_link_role") or "viewer").lower()
-        can_edit = role == "editor"
+        can_edit = role == "editor" #true if this is an editor link
 
         return render_page(
             "Shared Calendar",
@@ -122,15 +127,16 @@ def public_calendar(token):
             )
 
 
+
 @ui_bp.route("/guest/<token>/events/create", methods=["POST"])
 def public_create_event(token):
-    """Creates an event on the shared calendar; rejects the request if the token is view-only or invalid."""
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
     end_timestamp = (request.form.get("end_timestamp") or "").strip()
 
-    if not title:
+    # check if title field was left empty
+    if len(title) == 0:
         return redirect(
             url_for(
                 "ui.public_calendar",
@@ -141,25 +147,25 @@ def public_create_event(token):
         )
 
     try:
-        calendar_row, err = _get_editor_calendar(token)
+        cal_row, err = _get_editor_calendar(token)
         if err:
             return err
 
-        # owner_id is set to the calendar owner so events appear under the right account
-        payload = {
+        # owner_id is the calendar owner so events show under the right account
+        pload = {
             "title": title,
-            "owner_id": calendar_row.get("owner_id"),
-            "calendar_ids": [str(calendar_row.get("id"))],
+            "owner_id": cal_row.get("owner_id"),
+            "calendar_ids": [str(cal_row.get("id"))],
         }
         if description:
-            payload["description"] = description
+            pload["description"] = description
         if start_timestamp:
-            payload["start_timestamp"] = start_timestamp
+            pload["start_timestamp"] = start_timestamp
         if end_timestamp:
-            payload["end_timestamp"] = end_timestamp
+            pload["end_timestamp"] = end_timestamp
 
         supabase = get_supabase_client()
-        supabase.table("events").insert(payload).execute()
+        supabase.table("events").insert(pload).execute()
 
         return redirect(
             url_for(
@@ -182,18 +188,17 @@ def public_create_event(token):
 
 @ui_bp.route("/guest/<token>/events/<event_id>/edit", methods=["POST"])
 def public_edit_event(token, event_id):
-    """Updates a specific event on the shared calendar; verifies the event belongs to this calendar before writing."""
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
     end_timestamp = (request.form.get("end_timestamp") or "").strip()
 
     try:
-        calendar_row, err = _get_editor_calendar(token)
+        calRow, err = _get_editor_calendar(token)
         if err:
             return err
 
-        calendar_id = str(calendar_row.get("id"))
+        calId = str(calRow.get("id"))
         supabase = get_supabase_client()
 
         # confirm the event is part of this calendar before allowing edits
@@ -201,7 +206,7 @@ def public_edit_event(token, event_id):
             supabase.table("events")
             .select("id")
             .eq("id", event_id)
-            .overlaps("calendar_ids", [calendar_id])
+            .overlaps("calendar_ids", [calId])
             .limit(1)
             .execute()
         )
@@ -216,7 +221,7 @@ def public_edit_event(token, event_id):
             )
 
         updates = {
-            # always include optional fields so guests can clear them by submitting blank
+            # optional fields are always included so guests can clear them by submitting blank
             "description": description or None,
             "start_timestamp": start_timestamp or None,
             "end_timestamp": end_timestamp or None,
@@ -244,10 +249,8 @@ def public_edit_event(token, event_id):
             )
         )
 
-
 @ui_bp.route("/guest/<token>/events/<event_id>/delete", methods=["POST"])
 def public_delete_event(token, event_id):
-    """Deletes a specific event from the shared calendar; confirms the event belongs here before removing."""
     try:
         calendar_row, err = _get_editor_calendar(token)
         if err:
@@ -256,7 +259,7 @@ def public_delete_event(token, event_id):
         calendar_id = str(calendar_row.get("id"))
         supabase = get_supabase_client()
 
-        # confirm the event is part of this calendar before deleting
+        # make sure the event belongs to this calendar before deleting
         existing = (
             supabase.table("events")
             .select("id")

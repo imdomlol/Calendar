@@ -1,22 +1,19 @@
-# home and dashboard routes; the root route renders a month-preview calendar for logged-in users
 from flask import redirect, request, url_for
-
 from api.ui_routes import ui_bp
+
 from api.ui_routes.helpers import (
     _get_ui_supabase_client,
     _ui_user,
     admin_nav,
-    build_month_preview_data,
     guest_nav,
-    placeholder_calendars,
-    placeholder_events,
     render_page,
     ui_login_required,
     user_nav,
 )
+from api.ui_routes.helpers import build_month_preview_data, placeholder_calendars, placeholder_events
 
 
-# main landing route; shows a guest page if not logged in, or a month preview calendar if logged in
+# main landing route
 @ui_bp.route("/")
 def home():
     user = _ui_user()
@@ -24,7 +21,7 @@ def home():
     if not user:
         return render_page("Calendar Info System", "guest", guest_nav(), "home/guest.html")
 
-    user_id = user.get("id")
+    userId = user.get("id")
     selected_calendar_id = (request.args.get("calendar_id") or "").strip()
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
@@ -37,18 +34,22 @@ def home():
         calendars_result = (
             supabase.table("calendars")
             .select("id, name, owner_id")
-            .eq("owner_id", user_id)
+            .eq("owner_id", userId)
             .order("age_timestamp", desc=False)
             .execute()
         )
         calendars = calendars_result.data or []
 
         if calendars:
-            # fall back to the first calendar if the requested id is missing or invalid
-            selected_calendar = next(
-                (c for c in calendars if str(c.get("id")) == selected_calendar_id),
-                calendars[0],
-            )
+            # loop through calendars to find the selected one
+            # if we cant find it we fall back to the first one
+            selected_calendar = None
+            for c in calendars:
+                if str(c.get("id")) == selected_calendar_id:
+                    selected_calendar = c
+                    break
+            if selected_calendar is None:
+                selected_calendar = calendars[0]
             selected_calendar_id = str(selected_calendar.get("id"))
 
             events_result = (
@@ -78,16 +79,22 @@ def home():
                        message=message)
 
 
+
 @ui_bp.route("/home")
 def brand_home():
-    return redirect(url_for("ui.home"))
+    # this handles the /home url
+    # some users might try /home instead of /
+    # we just redirect them to the actual home page
+    # url_for gives us the url for the home function
+    homeUrl = url_for("ui.home") #get home url
+    # redirect the browser there
+    return redirect(homeUrl)
 
-
-# TODO: view_calendars and view_events are stubs not yet wired to real queries
 @ui_bp.route("/calendars")
 def view_calendars():
+    cals = placeholder_calendars #placeholder data for now
     return render_page("View Calendars", "guest", guest_nav(), "home/view_calendars.html",
-                       calendars=placeholder_calendars)
+                       calendars=cals)
 
 
 @ui_bp.route("/events")
@@ -96,12 +103,14 @@ def view_events():
                        events=placeholder_events)
 
 
-# role can be "user", "admin", or anything else; "user" and "admin" require login
+
+
 @ui_bp.route("/dashboard/<role>")
 def dashboard(role):
     if role in {"user", "admin"} and not _ui_user():
         return redirect(url_for("ui.login", next=request.path))
 
+    # pick nav based on role
     nav = admin_nav() if role == "admin" else user_nav()
     return render_page(
         "Admin Dashboard" if role == "admin" else "User Dashboard",
