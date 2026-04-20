@@ -11,6 +11,7 @@ from api.ui_routes.helpers import (
     placeholder_calendars,
     placeholder_events,
     render_page,
+    ui_login_required,
     user_nav,
 )
 
@@ -25,7 +26,8 @@ def home():
 
     user_id = user.get("id")
     selected_calendar_id = (request.args.get("calendar_id") or "").strip()
-    status_message = ""
+    status = (request.args.get("status") or "").strip()
+    message = (request.args.get("message") or "").strip()
     calendars = []
     selected_calendar = None
     events_for_calendar = []
@@ -51,28 +53,29 @@ def home():
 
             events_result = (
                 supabase.table("events")
-                .select("id, title, start_timestamp, end_timestamp")
+                .select("id, title, description, start_timestamp, end_timestamp")
                 .overlaps("calendar_ids", [selected_calendar_id])
                 .order("start_timestamp", desc=False)
                 .execute()
             )
             events_for_calendar = events_result.data or []
     except Exception as exc:
-        status_message = f"Could not load calendars: {exc}"
+        status = "error"
+        message = f"Could not load calendars: {exc}"
 
     if not calendars:
         return render_page("Calendar Home", "user", user_nav(), "home/no_calendars.html",
-                           status_message=status_message)
+                           status=status, message=message)
 
-    calendar_data = build_month_preview_data(events_for_calendar)
     calendar_name = selected_calendar.get("name") or "Untitled Calendar"
 
     return render_page("Calendar Home", "user", user_nav(), "home/calendar.html",
                        calendars=calendars,
                        selected_calendar_id=selected_calendar_id,
                        calendar_name=calendar_name,
-                       calendar_data=calendar_data,
-                       status_message=status_message)
+                       events=events_for_calendar,
+                       status=status,
+                       message=message)
 
 
 @ui_bp.route("/home")

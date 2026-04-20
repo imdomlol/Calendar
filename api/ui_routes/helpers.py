@@ -169,9 +169,7 @@ def guest_nav():
 def features_nav():
     if _ui_user():
         return [
-            {"label": "Calendars", "href": url_for("ui.manage_calendars")},
             {"label": "Friends", "href": url_for("ui.manage_friends")},
-            {"label": "Events", "href": url_for("ui.manage_events")},
         ]
     return [
         {"label": "Calendars", "href": url_for("ui.view_calendars")},
