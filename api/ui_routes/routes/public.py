@@ -78,7 +78,7 @@ def public_calendar(token):
         calendar_row = _resolve_shared_calendar(token)
         if not calendar_row:
             return render_page(
-                "Shared Calendar", "guest", guest_nav(), "public/not_found.html"
+                "Shared Calendar", "guest", guest_nav(), "guest/not_found.html"
             )
 
         events = _load_calendar_events(calendar_row.get("id"))
@@ -89,7 +89,7 @@ def public_calendar(token):
             "Shared Calendar",
             "guest",
             guest_nav(),
-            "public/calendar.html",
+            "guest/calendar.html",
             token=token,
             calendar=calendar_row,
             events=events,
@@ -110,7 +110,7 @@ def public_calendar(token):
                 "Shared Calendar",
                 "guest",
                 guest_nav(),
-                "public/not_found.html",
+                "guest/not_found.html",
                 message="Could not load the shared calendar. The link may be invalid or a server error occurred.",
             )
         except Exception:
