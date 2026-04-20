@@ -95,28 +95,29 @@ body {
   background: #eff6ff;
   color: #1d4ed8;
 }
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .settings-btn {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  z-index: 200;
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   font-size: 20px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #1f2937;
+  color: white;
   text-decoration: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.15);
+  flex-shrink: 0;
+  transition: transform .2s ease, background .15s ease;
 }
 .settings-btn:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #93c5fd;
+  transform: scale(1.18);
+  background: rgba(255,255,255,0.28);
+  color: white;
 }
 .content {
   padding: 24px;
