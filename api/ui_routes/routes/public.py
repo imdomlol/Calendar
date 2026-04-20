@@ -1,9 +1,14 @@
 # unauthenticated routes for shared calendars; anyone with a valid guest token can view or edit depending on role
+import logging
+import traceback
+
 from flask import redirect, request, url_for
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import guest_nav, render_page
 from utils.supabase_client import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_shared_calendar(token):
@@ -93,13 +98,28 @@ def public_calendar(token):
             can_edit=can_edit,
         )
     except Exception as exc:
-        return render_page(
-            "Shared Calendar",
-            "guest",
-            guest_nav(),
-            "public/not_found.html",
-            message=f"Could not load shared calendar: {exc}",
+        logger.error(
+            "public_calendar: unhandled exception for token %r — %s: %s\n%s",
+            token,
+            type(exc).__name__,
+            exc,
+            traceback.format_exc(),
         )
+        try:
+            return render_page(
+                "Shared Calendar",
+                "guest",
+                guest_nav(),
+                "public/not_found.html",
+                message="Could not load the shared calendar. The link may be invalid or a server error occurred.",
+            )
+        except Exception:
+            logger.error("public_calendar: fallback render also failed:\n%s", traceback.format_exc())
+            from flask import make_response
+            return make_response(
+                "<h1>Shared Calendar Unavailable</h1><p>An error occurred. Please try again later.</p>",
+                500,
+            )
 
 
 @ui_bp.route("/guest/<token>/events/create", methods=["POST"])
