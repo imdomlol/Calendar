@@ -1,3 +1,5 @@
+# admin routes for system management pages (logs, notifications, user suspend, external unlink)
+# TODO: all routes are stubs backed by placeholder data and need real database queries
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
     admin_nav,

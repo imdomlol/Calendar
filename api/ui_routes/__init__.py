@@ -1,4 +1,5 @@
 import os
+
 from flask import Blueprint
 
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -11,4 +12,11 @@ ui_bp = Blueprint(
     static_folder=os.path.join(_api_dir, "static"),
 )
 
-from api.ui_routes.routes import auth, home, settings, user, admin  # noqa: F401, E402
+from api.ui_routes.routes import (  # noqa: F401, E402
+    admin,
+    auth,
+    home,
+    public,
+    settings,
+    user,
+)
