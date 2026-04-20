@@ -16,7 +16,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-from api.index import app
+from api.index import calApp
 
 
 def auth_request(path: str, payload: dict) -> tuple[int, dict]:
@@ -86,7 +86,7 @@ def main() -> int:
         print("Could not obtain an access token from existing credentials.")
         return 1
 
-    client = app.test_client()
+    client = calApp.test_client()
 
     unauthorized = client.get("/me")
     if unauthorized.status_code != 401:

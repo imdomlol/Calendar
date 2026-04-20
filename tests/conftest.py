@@ -9,7 +9,7 @@ os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-anon-key")
 os.environ.setdefault("FLASK_SECRET_KEY", "test-secret")
 
-from api.index import app as flask_app  # noqa: E402
+from api.index import calApp as flask_app  # noqa: E402
 
 FAKE_USER = {
     "id": "user-123",
