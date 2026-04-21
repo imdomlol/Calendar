@@ -1,7 +1,6 @@
-from api.ui_routes.helpers import render_page, ui_login_required
 from api.ui_routes import ui_bp
-
-from api.ui_routes.helpers import admin_nav, placeholder_externals, placeholder_logs
+from api.ui_routes.helpers import render_page, ui_login_required, admin_nav, placeholder_logs
+from api.ui_routes.helpers import placeholder_externals
 
 
 # this is the route that shows system logs for admins
@@ -25,9 +24,12 @@ def system_logs():
     return render_page("System Logs", "admin", nav, "admin/logs.html",
                        logs=logData)
 
+
 @ui_bp.route("/admin/notifications")
 @ui_login_required
 def send_notification():
+    # show the notifications page
+    # admin can send messages from here
     return render_page("Notifications", "admin", admin_nav(), "admin/notification.html")
 
 
@@ -37,13 +39,14 @@ def send_notification():
 @ui_login_required
 def suspend_user():
     navData = admin_nav() #admin nav
+    # render the suspend user page
     return render_page("Suspend User", "admin", navData, "admin/suspend.html")
-
 
 @ui_bp.route("/admin/unlink")
 @ui_login_required
 def admin_unlink():
     # get providers list for unlink page
     provs = placeholder_externals
+    # pass the providers to the template so the admin can pick one to unlink
     return render_page("Unlink External Calendars", "admin", admin_nav(), "admin/unlink.html",
                        providers=provs)

@@ -1,18 +1,19 @@
-import traceback
 import logging
+import traceback
 from flask import redirect, request, url_for
-
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import guest_nav, render_page
 from utils.supabase_client import get_supabase_client
 
-logger = logging.getLogger(__name__)
+calLogger = logging.getLogger(__name__)
 
 
 def _resolve_shared_calendar(token):
-    supabase = get_supabase_client()
+    # look up a calendar by its guest link token
+    # returns the calendar row or None if not found or inactive
+    calDb = get_supabase_client()
     result = (
-        supabase.table("calendars")
+        calDb.table("calendars")
         .select(
             "id, name, owner_id, guest_link_token, guest_link_role, guest_link_active"
         )
@@ -22,8 +23,9 @@ def _resolve_shared_calendar(token):
         .execute()
     )
     rows = result.data or []
-    if not rows:
+    if len(rows) == 0:
         return None
+    # return the first row since we limit to 1
     return rows[0]
 
 
@@ -31,12 +33,12 @@ def _load_calendar_events(calendar_id):
     # this function gets all the events for a calendar
     # we pass in calendar_id to know which one to look for
     # first get the supabase client so we can connect to the database
-    supabase = get_supabase_client()
+    calDb = get_supabase_client()
     # now we query the events table
     # overlaps checks if the calendar_ids array contains our id
     # we also order by start time so events appear in order
     result = (
-        supabase.table("events")
+        calDb.table("events")
         .select("id, title, description, start_timestamp, end_timestamp")
         .overlaps("calendar_ids", [str(calendar_id)])
         .order("start_timestamp", desc=False)
@@ -59,7 +61,7 @@ def _get_editor_calendar(token):
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message="Share link is invalid or inactive.",
+                message="Share link invalid or not active",
             )
         )
     role = str(calRow.get("guest_link_role") or "viewer").lower()
@@ -69,23 +71,28 @@ def _get_editor_calendar(token):
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message="This share link is view-only.",
+                message="Share link is view only",
             )
         )
     return calRow, None
 
+
 @ui_bp.route("/guest/<token>")
 def public_calendar(token):
+    # get status and message from query params if they were redirected here
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
 
     try:
+        # look up the calendar by the token
         calendar_row = _resolve_shared_calendar(token)
         if not calendar_row:
+            # token didn't match any active calendar
             return render_page(
                 "Shared Calendar", "guest", guest_nav(), "guest/not_found.html"
             )
 
+        # get the events and figure out the role for this link
         events = _load_calendar_events(calendar_row.get("id"))
         role = str(calendar_row.get("guest_link_role") or "viewer").lower()
         can_edit = role == "editor" #true if this is an editor link
@@ -102,12 +109,12 @@ def public_calendar(token):
             message=message,
             can_edit=can_edit,
         )
-    except Exception as exc:
-        logger.error(
+    except Exception as err:
+        calLogger.error(
             "public_calendar: unhandled exception for token %r — %s: %s\n%s",
             token,
-            type(exc).__name__,
-            exc,
+            type(err).__name__,
+            err,
             traceback.format_exc(),
         )
         try:
@@ -116,10 +123,10 @@ def public_calendar(token):
                 "guest",
                 guest_nav(),
                 "guest/not_found.html",
-                message="Could not load the shared calendar. The link may be invalid or a server error occurred.",
+                message="Couldn't load shared calendar, link may be invalid",
             )
         except Exception:
-            logger.error("public_calendar: fallback render also failed:\n%s", traceback.format_exc())
+            calLogger.error("public_calendar: fallback render also failed:\n%s", traceback.format_exc())
             from flask import make_response
             return make_response(
                 "<h1>Shared Calendar Unavailable</h1><p>An error occurred. Please try again later.</p>",
@@ -130,6 +137,7 @@ def public_calendar(token):
 
 @ui_bp.route("/guest/<token>/events/create", methods=["POST"])
 def public_create_event(token):
+    # get form fields
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
@@ -142,7 +150,7 @@ def public_create_event(token):
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message="Title is required.",
+                message="Title is required",
             )
         )
 
@@ -164,30 +172,31 @@ def public_create_event(token):
         if end_timestamp:
             pload["end_timestamp"] = end_timestamp
 
-        supabase = get_supabase_client()
-        supabase.table("events").insert(pload).execute()
+        calDb = get_supabase_client()
+        calDb.table("events").insert(pload).execute()
 
         return redirect(
             url_for(
                 "ui.public_calendar",
                 token=token,
                 status="ok",
-                message="Event created successfully.",
+                message="Event created.",
             )
         )
-    except Exception as exc:
+    except Exception as e:
         return redirect(
             url_for(
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message=f"Failed to create event: {exc}",
+                message=f"create event failed: {e}",
             )
         )
 
 
 @ui_bp.route("/guest/<token>/events/<event_id>/edit", methods=["POST"])
 def public_edit_event(token, event_id):
+    # get form fields for the edit
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
     start_timestamp = (request.form.get("start_timestamp") or "").strip()
@@ -198,12 +207,13 @@ def public_edit_event(token, event_id):
         if err:
             return err
 
+        # get the calendar id as a string for the overlap check
         calId = str(calRow.get("id"))
-        supabase = get_supabase_client()
+        calDb = get_supabase_client()
 
         # confirm the event is part of this calendar before allowing edits
         existing = (
-            supabase.table("events")
+            calDb.table("events")
             .select("id")
             .eq("id", event_id)
             .overlaps("calendar_ids", [calId])
@@ -216,7 +226,7 @@ def public_edit_event(token, event_id):
                     "ui.public_calendar",
                     token=token,
                     status="error",
-                    message="Event not found for this shared calendar.",
+                    message=f"Event {event_id} not found in this calendar",
                 )
             )
 
@@ -229,14 +239,14 @@ def public_edit_event(token, event_id):
         if title:
             updates["title"] = title
 
-        supabase.table("events").update(updates).eq("id", event_id).execute()
+        calDb.table("events").update(updates).eq("id", event_id).execute()
 
         return redirect(
             url_for(
                 "ui.public_calendar",
                 token=token,
                 status="ok",
-                message="Event updated successfully.",
+                message="Event updated.",
             )
         )
     except Exception as exc:
@@ -245,7 +255,7 @@ def public_edit_event(token, event_id):
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message=f"Failed to update event: {exc}",
+                message=f"edit event {event_id} failed: {exc}",
             )
         )
 
@@ -256,12 +266,13 @@ def public_delete_event(token, event_id):
         if err:
             return err
 
+        # get the calendar id string for the overlap check
         calendar_id = str(calendar_row.get("id"))
-        supabase = get_supabase_client()
+        calDb = get_supabase_client()
 
         # make sure the event belongs to this calendar before deleting
         existing = (
-            supabase.table("events")
+            calDb.table("events")
             .select("id")
             .eq("id", event_id)
             .overlaps("calendar_ids", [calendar_id])
@@ -274,26 +285,26 @@ def public_delete_event(token, event_id):
                     "ui.public_calendar",
                     token=token,
                     status="error",
-                    message="Event not found for this shared calendar.",
+                    message=f"Event {event_id} not found in this calendar",
                 )
             )
 
-        supabase.table("events").delete().eq("id", event_id).execute()
+        calDb.table("events").delete().eq("id", event_id).execute()
 
         return redirect(
             url_for(
                 "ui.public_calendar",
                 token=token,
                 status="ok",
-                message="Event deleted successfully.",
+                message="Event deleted.",
             )
         )
-    except Exception as exc:
+    except Exception as ex:
         return redirect(
             url_for(
                 "ui.public_calendar",
                 token=token,
                 status="error",
-                message=f"Failed to delete event: {exc}",
+                message=f"delete event {event_id} failed: {ex}",
             )
         )

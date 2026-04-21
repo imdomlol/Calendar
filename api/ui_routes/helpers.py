@@ -1,27 +1,28 @@
-import calendar as pycalendar
-from functools import wraps
 import os
-from datetime import date
 import subprocess
-from datetime import datetime
-
 from flask import redirect, render_template, request, session, url_for
-
+from functools import wraps
 from utils.supabase_client import get_supabase_client
+from datetime import date, datetime
+import calendar as pycalendar
 
 
 def _compute_build_info():
+    # try to get the git commit sha from the vercel env var
     sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "").strip()
     shortSha = sha[:7] if sha else ""
     commitDate = ""
 
     try:
+        # run git log to get the short sha and the commit date
+        # format string splits them with ||| so we can split later
         res = subprocess.run(
             ["git", "log", "-1", "--format=%h|||%cd", "--date=format:%b %d %Y, %H:%M"],
             capture_output=True, text=True, timeout=2,
         )
         if res.returncode == 0 and res.stdout.strip():
             parts = res.stdout.strip().split("|||", 1)
+            # only use git sha if we didnt get one from vercel
             if not shortSha:
                 shortSha = parts[0]
             if len(parts) > 1:
@@ -29,8 +30,10 @@ def _compute_build_info():
     except Exception:
         pass
 
+    # if we have nothing return None
     if not shortSha and not commitDate:
         return None
+    # return a dict with the sha and date
     return {"sha": shortSha, "date": commitDate}
 
 
@@ -57,37 +60,54 @@ placeholder_logs = [
 
 
 def _ui_user():
+    # get the user dict from the flask session
     usr = session.get("ui_user")
+    # check if its a dict
     isDict = isinstance(usr, dict)
+    # if its a dict and has an id then its a valid user
     if isDict == True and usr.get("id"):
         return usr
+    # otherwise return None meaning no user is logged in
     return None
 
 
-
 def _get_ui_supabase_client():
+    # get the current user data from session
     userData = _ui_user() or {}
+    # get the access token from user data
     tok = userData.get("access_token")
+    # if there is no token we cant make authenticated requests
     if not tok:
-        raise RuntimeError("Login session expired. Please log in again.")
-    sb = get_supabase_client()
-    sb.postgrest.auth(tok)
-    return sb
+        raise RuntimeError("No token in session, can't auth calDb")
+    # get the supabase client and authenticate it with the token
+    calDb = get_supabase_client()
+    calDb.postgrest.auth(tok)
+    return calDb
+
 
 def ui_login_required(view_func):
+    # this is a decorator that checks if the user is logged in
+    # if they are not logged in it redirects them to the login page
+    # we use wraps to keep the original function name and docstring
     @wraps(view_func)
     def wrapped(*args, **kwargs):
+        # check if there is a user in the session
         if not _ui_user():
+            # no user so send them to login
+            # we pass the current path so they come back after logging in
             return redirect(url_for("ui.login", next=request.path))
+        # user is logged in so call the actual function
         return view_func(*args, **kwargs)
     return wrapped
 
-
 def _format_login_error(exception):
+    # pull the message and code out of the exception
+    # supabase exceptions sometimes have a message attribute
     msg = (getattr(exception, "message", None) or str(exception) or "").strip()
     code = (getattr(exception, "code", None) or "").strip()
 
     norm = msg.lower() #normalize so we can compare easily
+    # check if the error is about email not being confirmed
     if "email not confirmed" in norm or code == "email_not_confirmed":
         if code:
             return (
@@ -96,12 +116,12 @@ def _format_login_error(exception):
             )
         return "Your account is not verified yet. Check your email for the verification link and try again."
 
+    # if there is a code include it in the message
     if code:
         return f"Login failed: {msg} (code: {code})"
 
-    return "Invalid credentials."
-
-
+    # fallback for any other error
+    return "Invalid credentials"
 
 
 def _resolve_app_base_url():
@@ -121,6 +141,7 @@ def _resolve_app_base_url():
     # return whatever url we ended up with
     return baseUrl
 
+
 def _google_oauth_config():
     # this just reads the google oauth credentials from env vars
     # we need both of these to do the oauth flow
@@ -131,27 +152,38 @@ def _google_oauth_config():
 
 
 def build_month_preview_data(events_for_calendar):
+    # get todays date so we know which month to build
     today = date.today()
     year = today.year
     month = today.month
 
+    # count how many events fall on each day of the month
+    # evtCounts is a dict where the key is the day number
     evtCounts = {}
     for event in events_for_calendar:
         raw = str(event.get("start_timestamp") or "")
         try:
+            # parse the timestamp into a datetime object
+            # we only use the first 19 chars to cut off timezone info
             dt = datetime.fromisoformat(raw[:19])
         except ValueError:
+            # if the timestamp is not a valid datetime we just skip this event
             continue
+        # check if this event is in the current month
         if dt.year == year and dt.month == month:
+            # increment the count for this day
             if dt.day in evtCounts:
                 evtCounts[dt.day] = evtCounts[dt.day] + 1
             else:
                 evtCounts[dt.day] = 1
 
+    # build the weeks list for the calendar grid
+    # each week is a list of day objects with a day number and event count
     weeks = []
     for week in pycalendar.monthcalendar(year, month):
         row = []
         for d in week:
+            # pycalendar uses 0 for days outside the month
             if d != 0:
                 dayVal = d
             else:
@@ -178,13 +210,16 @@ def guest_nav():
     # return the nav list
     return navList
 
+
 def features_nav():
     # check if someone is logged in
+    # we show different nav items depending on whether they are logged in or not
     if _ui_user():
         return [
             {"label": "Friends", "href": url_for("ui.manage_friends")},
         ]
     else:
+        # not logged in so show links that go to login for protected stuff
         return [
             {"label": "Calendars", "href": url_for("ui.view_calendars")},
             {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
@@ -192,9 +227,9 @@ def features_nav():
         ]
 
 
-
-
 def user_nav():
+    # build the nav links for logged in users
+    # each dict has a label and an href
     return [
         {"label": "Dashboard", "href": url_for("ui.dashboard", role="user")},
         {"label": "Manage Externals", "href": url_for("ui.manage_externals")},
@@ -204,6 +239,8 @@ def user_nav():
     ]
 
 def admin_nav():
+    # same as user_nav but for admins
+    # admins have different pages they can go to
     return [
         {"label": "Dashboard", "href": url_for("ui.dashboard", role="admin")},
         {"label": "System Logs", "href": url_for("ui.system_logs")},
@@ -214,15 +251,20 @@ def admin_nav():
 
 
 def render_page(title, role, nav, template, **ctx):
+    # this just calls render_template with the standard args we always pass
+    # title, role, and nav go to every page
+    # ctx is any extra stuff the specific page needs
     return render_template(template, title=title, role=role, nav=nav, **ctx)
 
 
 
-from api.ui_routes import ui_bp  # noqa: E402 — imported here to avoid circular import
+from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular import
 
 
 @ui_bp.context_processor
 def _inject_globals():
+    # inject variables that every template can use
+    # this runs before every request so the template always has fresh data
     return {
         "ui_user": _ui_user(),
         "features_nav": features_nav(),

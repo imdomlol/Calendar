@@ -1,10 +1,13 @@
 import os
-
 from flask import Blueprint
 
+# figure out where the api directory is so we can find the templates and static folders
+# __file__ is this file and dirname goes up one level to get the folder it lives in
 _here = os.path.dirname(os.path.abspath(__file__))
 _api_dir = os.path.dirname(_here)
 
+# create the flask blueprint for all the ui routes
+# the template and static folders are set relative to the api dir not this file
 ui_bp = Blueprint(
     "ui",
     __name__,

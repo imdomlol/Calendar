@@ -1,7 +1,5 @@
-import secrets
 from api.ui_routes import ui_bp
 from flask import redirect, request, url_for
-
 from api.ui_routes.helpers import (
     _get_ui_supabase_client,
     render_page,
@@ -9,6 +7,7 @@ from api.ui_routes.helpers import (
     user_nav,
 )
 from api.ui_routes.helpers import _resolve_app_base_url, _ui_user, placeholder_externals, placeholder_friends
+import secrets
 
 
 @ui_bp.route("/user/externals")
@@ -29,6 +28,7 @@ def manage_externals():
         providers=provs,
     )
 
+
 @ui_bp.route("/user/calendars")
 @ui_login_required
 def manage_calendars():
@@ -39,11 +39,11 @@ def manage_calendars():
 
     records = []
     has_guest_link_fields = True
-    supabase = None
+    calDb = None
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
         result = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .select(
                 "id, name, owner_id, member_ids, events, guest_link_token, guest_link_role, guest_link_active"
             )
@@ -52,15 +52,15 @@ def manage_calendars():
             .execute()
         )
         records = result.data or []
-    except Exception as exc:
+    except Exception as e:
         # handle the case where guest link columns dont exist yet
-        if "guest_link_" in str(exc):
+        if "guest_link_" in str(e):
             has_guest_link_fields = False
             try:
-                if not supabase:
-                    supabase = _get_ui_supabase_client()
+                if not calDb:
+                    calDb = _get_ui_supabase_client()
                 fallback = (
-                    supabase.table("calendars")
+                    calDb.table("calendars")
                     .select("id, name, owner_id, member_ids, events")
                     .eq("owner_id", ownerId)
                     .order("age_timestamp", desc=False)
@@ -72,12 +72,12 @@ def manage_calendars():
                     "Guest links are unavailable because calendar guest-link columns are missing. "
                     "Add guest_link_token, guest_link_role, and guest_link_active to calendars."
                 )
-            except Exception as fallback_exc:
+            except Exception as fallback_err:
                 status = "error"
-                message = f"Failed to load calendars: {fallback_exc}"
+                message = f"fallback query failed for owner {ownerId}: {fallback_err}"
         else:
             status = "error"
-            message = f"Failed to load calendars: {exc}"
+            message = f"Couldn't load calendars for owner {ownerId}: {e}"
 
     return render_page(
         "Manage Calendars",
@@ -97,22 +97,24 @@ def manage_calendars():
 @ui_bp.route("/user/calendars/create", methods=["POST"])
 @ui_login_required
 def create_calendar():
+    # get the calendar name from the form
     calName = (request.form.get("name") or "").strip()
     ownerId = _ui_user()["id"]
 
+    # make sure they actually typed a name
     if not calName:
         return redirect(
             url_for(
                 "ui.manage_calendars",
                 status="error",
-                message="Calendar name is required.",
+                message="Calendar name is required",
             )
         )
 
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
         result = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .insert(
                 {
                     "name": calName,
@@ -123,20 +125,21 @@ def create_calendar():
             )
             .execute()
         )
+        # get the id from the result so we can include it in the success message
         created_id = (result.data or [{}])[0].get("id") or "new row"
         return redirect(
             url_for(
                 "ui.manage_calendars",
                 status="ok",
-                message=f"Calendar created successfully (id: {created_id}).",
+                message=f"Calendar created (id: {created_id}).",
             )
         )
-    except Exception as exc:
+    except Exception as err:
         return redirect(
             url_for(
                 "ui.manage_calendars",
                 status="error",
-                message=f"Failed to create calendar: {exc}",
+                message=f"create calendar failed for owner {ownerId}: {err}",
             )
         )
 
@@ -144,8 +147,10 @@ def create_calendar():
 @ui_bp.route("/user/calendars/<calendar_id>/guest-link", methods=["POST"])
 @ui_login_required
 def create_guest_link(calendar_id):
+    # get the user id and the role they want for the link
     userId = _ui_user()["id"]
     role = (request.form.get("role") or "viewer").strip().lower()
+    # only viewer and editor are valid roles
     if role not in {"viewer", "editor"}:
         role = "viewer"
 
@@ -153,9 +158,10 @@ def create_guest_link(calendar_id):
     tok = secrets.token_urlsafe(24)
 
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
+        # check that the user owns this calendar before creating a link
         ownership = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .select("id")
             .eq("id", calendar_id)
             .eq("owner_id", userId)
@@ -166,11 +172,12 @@ def create_guest_link(calendar_id):
                 url_for(
                     "ui.manage_calendars",
                     status="error",
-                    message="You do not have access to that calendar.",
+                    message=f"Calendar {calendar_id} not owned by uid {userId}",
                 )
             )
 
-        supabase.table("calendars").update(
+        # save the token and role to the calendar row
+        calDb.table("calendars").update(
             {
                 "guest_link_token": tok,
                 "guest_link_role": role,
@@ -178,6 +185,7 @@ def create_guest_link(calendar_id):
             }
         ).eq("id", calendar_id).eq("owner_id", userId).execute()
 
+        # build the full guest url to include in the success message
         guest_url = (
             f"{_resolve_app_base_url()}{url_for('ui.public_calendar', token=tok)}"
         )
@@ -199,22 +207,22 @@ def create_guest_link(calendar_id):
             url_for(
                 "ui.manage_calendars",
                 status="error",
-                message=f"Failed to generate guest link: {text}",
+                message=f"guest link failed for calendar {calendar_id}: {text}",
             )
         )
-
-
 
 
 @ui_bp.route("/user/calendars/<calendar_id>/guest-link/revoke", methods=["POST"])
 @ui_login_required
 def revoke_guest_link(calendar_id):
+    # get the user id to verify ownership
     uid = _ui_user()["id"]
 
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
+        # check ownership before revoking
         ownership = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .select("id")
             .eq("id", calendar_id)
             .eq("owner_id", uid)
@@ -225,11 +233,12 @@ def revoke_guest_link(calendar_id):
                 url_for(
                     "ui.manage_calendars",
                     status="error",
-                    message="You do not have access to that calendar.",
+                    message=f"Calendar {calendar_id} not owned by uid {uid}",
                 )
             )
 
-        supabase.table("calendars").update(
+        # clear the guest link fields to revoke it
+        calDb.table("calendars").update(
             {
                 "guest_link_token": None,
                 "guest_link_role": None,
@@ -241,11 +250,11 @@ def revoke_guest_link(calendar_id):
             url_for(
                 "ui.manage_calendars",
                 status="ok",
-                message="Guest link revoked successfully.",
+                message="Guest link revoked.",
             )
         )
-    except Exception as exc:
-        text = str(exc)
+    except Exception as e:
+        text = str(e)
         if "guest_link_" in text:
             text = (
                 "Guest-link columns are missing on calendars. "
@@ -255,9 +264,10 @@ def revoke_guest_link(calendar_id):
             url_for(
                 "ui.manage_calendars",
                 status="error",
-                message=f"Failed to revoke guest link: {text}",
+                message=f"revoke failed for calendar {calendar_id}: {text}",
             )
         )
+
 
 @ui_bp.route("/user/events")
 @ui_login_required
@@ -268,13 +278,15 @@ def manage_events():
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
 
+    # these will be filled in below
     calendars = []
     events = []
 
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
+        # get the user's calendars so we can show a dropdown
         calendars_result = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .select("id, name")
             .eq("owner_id", userId)
             .order("age_timestamp", desc=False)
@@ -289,21 +301,24 @@ def manage_events():
                 if str(c.get("id")) == selected_calendar_id:
                     foundIt = True
                     break
+            # if no match fall back to first calendar
             if not selected_calendar_id or foundIt == False:
                 selected_calendar_id = str(calendars[0].get("id"))
 
+            # now get the events for the selected calendar
             events_result = (
-                supabase.table("events")
+                calDb.table("events")
                 .select("id, title, description, start_timestamp, end_timestamp")
                 .overlaps("calendar_ids", [selected_calendar_id])
                 .order("start_timestamp", desc=False)
                 .execute()
             )
             events = events_result.data or []
-    except Exception as exc:
+    except Exception as err:
         status = "error"
-        message = f"Failed to load events: {exc}"
+        message = f"Couldn't load events for uid {userId}: {err}"
 
+    # if the user has no calendars show a different page
     if not calendars:
         return render_page(
             "Manage Events",
@@ -330,6 +345,7 @@ def manage_events():
 @ui_bp.route("/user/events/create", methods=["POST"])
 @ui_login_required
 def create_event():
+    # get the user id and all the form fields
     uid = _ui_user()["id"]
     calendar_id = (request.form.get("calendar_id") or "").strip()
     title = (request.form.get("title") or "").strip()
@@ -349,9 +365,10 @@ def create_event():
         )
 
     try:
-        supabase = _get_ui_supabase_client()
+        calDb = _get_ui_supabase_client()
+        # check the user actually owns the calendar they are adding to
         ownership = (
-            supabase.table("calendars")
+            calDb.table("calendars")
             .select("id")
             .eq("id", calendar_id)
             .eq("owner_id", uid)
@@ -363,10 +380,11 @@ def create_event():
                     "ui.manage_events",
                     calendar_id=calendar_id,
                     status="error",
-                    message="You do not have access to that calendar.",
+                    message=f"Calendar {calendar_id} not owned by uid {uid}",
                 )
             )
 
+        # build the payload and add optional fields if they are not empty
         payload = {"title": title, "owner_id": uid, "calendar_ids": [calendar_id]}
         if description:
             payload["description"] = description
@@ -375,14 +393,14 @@ def create_event():
         if end_timestamp:
             payload["end_timestamp"] = end_timestamp
 
-        result = supabase.table("events").insert(payload).execute()
+        result = calDb.table("events").insert(payload).execute()
         created_id = (result.data or [{}])[0].get("id") or "new row" #get id from result
         return redirect(
             url_for(
                 "ui.manage_events",
                 calendar_id=calendar_id,
                 status="ok",
-                message=f"Event created successfully (id: {created_id}).",
+                message=f"Event created (id: {created_id}).",
             )
         )
     except Exception as exc:
@@ -391,7 +409,7 @@ def create_event():
                 "ui.manage_events",
                 calendar_id=calendar_id,
                 status="error",
-                message=f"Failed to create event: {exc}",
+                message=f"create event failed for uid {uid}: {exc}",
             )
         )
 
@@ -400,6 +418,8 @@ def create_event():
 @ui_bp.route("/user/friends")
 @ui_login_required
 def manage_friends():
+    # show the friends management page
+    # uses placeholder friends data for now
     return render_page(
         "Manage Friends",
         "user",
@@ -411,4 +431,5 @@ def manage_friends():
 @ui_bp.route("/user/remove-account")
 @ui_login_required
 def remove_account():
+    # show the remove account confirmation page
     return render_page("Remove Account", "user", user_nav(), "user/remove_account.html")
