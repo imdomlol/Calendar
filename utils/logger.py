@@ -1,4 +1,15 @@
-from utils.supabase_client import get_supabase_client
+import os
+from supabase import create_client
+
+
+def _get_logger_client():
+    # use service role key so we can always write logs
+    # the regular SUPABASE_KEY is the anon key which gets blocked by RLS
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SECRET_API_KEY")
+    if not url or not key:
+        return None
+    return create_client(url, key)
 
 
 # this function logs stuff to the supabase logs table
@@ -18,7 +29,10 @@ def logEvent(level, eventType, message, userId=None, path=None, method=None, sta
 
     # now try to insert into supabase
     try:
-        supabase = get_supabase_client()
+        supabase = _get_logger_client()
+        if supabase is None:
+            print("WARNING: SUPABASE_SECRET_API_KEY not set, skipping log")
+            return
         result = supabase.table("logs").insert(logRecord).execute()
         # print(result) # uncomment to debug
     except Exception as err:
