@@ -1,9 +1,9 @@
 import os
 from flask import Flask, redirect, url_for
 from supabase import create_client
-import logging
 from api.auth_routes import auth_bp
 from flask import abort, g, request
+from utils.logger import logEvent
 from models.calendar import Calendar
 from flask_cors import CORS
 from models.event import Event
@@ -41,36 +41,16 @@ def welcome():
 # Configure CORS
 CORS(calApp, resources={r"/api/*": {"origins": "https://your-domain.com"}})
 
-logging.basicConfig(level=logging.INFO)
-calLog = logging.getLogger(__name__)
-
-
-def logRequest():
-    # this function just calls the other log function
-    # not sure why this exists but leaving it
-    log_request()
-
 @calApp.before_request
 def log_request():
-    # logs every incoming request method and path
-    calLog.info(f"{request.method} {request.path}")
-    #userAgent = request.headers.get('User-Agent')
-    # optimize: could add request timing here
-
+    logEvent("INFO", "request", request.method + " " + request.path, path=request.path, method=request.method)
 
 
 @calApp.after_request
 def log_response(response):
-    # first we get the response object
-    # we store it in resp
-    # then we get the status code
-    # status code is the number like 200 or 404
-    # then we log it
-    # then we return resp so flask can send it back 
-    resp = response 
-    statusCode = resp.status_code #get the code
-    calLog.info(f"Response: {statusCode}")
-    return resp
+    statusCode = response.status_code
+    logEvent("INFO", "request", "response " + str(statusCode), path=request.path, method=request.method, statusCode=statusCode)
+    return response
 
 
 # Error handlers
@@ -79,37 +59,27 @@ def log_response(response):
 
 @calApp.errorhandler(400)
 def badRequest(e):
-    """
-    Handles 400 bad request errors.
-    Logs the error and returns a JSON error response.
-    """
-    calLog.error(f"bad request: {e.description}")
-    #log.error(f"bad request: {e.description}")
+    logEvent("ERROR", "error", "bad request: " + str(e.description), path=request.path, method=request.method, statusCode=400)
     return {"error": e.description}, 400
 
 @calApp.errorhandler(401)
 def unauthorized(e):
-    # handles 401 unauthorized errors
-    calLog.error(f"unauthorized: {e.description}")
+    logEvent("ERROR", "error", "unauthorized: " + str(e.description), path=request.path, method=request.method, statusCode=401)
     return {"error": "unauthorized"}, 401
-
-
 
 @calApp.errorhandler(403)
 def forbiddenError(e):
-    '''Handles 403 forbidden errors.'''
-    calLog.error(f"forbidden: {e.description}")
+    logEvent("ERROR", "error", "forbidden: " + str(e.description), path=request.path, method=request.method, statusCode=403)
     return {"error": "forbidden"}, 403
 
 @calApp.errorhandler(404)
 def not_found(e):
-    calLog.error(f"Not found: {e.description}")
+    logEvent("ERROR", "error", "not found: " + str(e.description), path=request.path, method=request.method, statusCode=404)
     return {"error": "Not found"}, 404
-
 
 @calApp.errorhandler(500)
 def serverError(e):
-    calLog.error(f"error: {str(e)}")
+    logEvent("ERROR", "error", "server error: " + str(e), path=request.path, method=request.method, statusCode=500)
     return {"error": "error"}, 500
 
 
