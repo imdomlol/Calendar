@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Log In</h1>
+  <p class="muted">Sign in to access user and admin pages.</p>
+</div>
+<div class="card">
+  {% if info and not error %}
+    <p style="color:#166534; margin:0 0 12px 0;">{{ info }}</p>
+  {% endif %}
+  {% if error %}
+    <p style="color:#b91c1c; margin:0 0 12px 0;">{{ error }}</p>
+  {% endif %}
+  <form method="POST" action="/ui/login?next={{ next_path | urlencode }}"
+        style="display:flex; flex-direction:column; gap:10px; max-width:420px;">
+    <input type="email" name="email" placeholder="Email" required
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
+    <input type="password" name="password" placeholder="Password" required
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
+    <button type="submit" class="btn"
+            style="border:none; cursor:pointer; width:max-content; margin-top:0;">Log In</button>
+  </form>
+  <p class="muted" style="margin-top:12px;">
+    Need an account? <a href="/ui/register?next={{ next_path | urlencode }}">Register here</a>
+  </p>
+</div>
+{% endblock %}

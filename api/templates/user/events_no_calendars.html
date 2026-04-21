@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Manage Events</h1>
+  <p class="muted">Create events by attaching them to one of your calendars.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card">
+  <h4>No calendars available</h4>
+  <p>Create a calendar first, then come back to add events.</p>
+  <a class="btn" href="{{ url_for('ui.manage_calendars') }}">Go to Calendars</a>
+</div>
+{% endblock %}

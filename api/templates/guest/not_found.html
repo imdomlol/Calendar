@@ -1,0 +1,19 @@
+{% extends "guest_base.html" %}
+
+{% block content %}
+<div class="hero">
+  <h1>Shared Calendar Not Available</h1>
+  <p class="muted">This guest link is invalid, expired, or has been revoked by the calendar owner.</p>
+</div>
+
+{% if message %}
+<div class="card banner banner-error">
+  <p>{{ message }}</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h4>Need access?</h4>
+  <p>Ask the calendar owner for a new guest link.</p>
+</div>
+{% endblock %}

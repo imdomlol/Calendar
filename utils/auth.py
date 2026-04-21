@@ -6,6 +6,7 @@ from urllib.request import Request, urlopen
 
 from flask import abort, g, request
 
+
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):

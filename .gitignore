@@ -1,5 +1,3 @@
-.venv/
-
 # Python bytecode/cache
 __pycache__/
 *.py[cod]
@@ -16,6 +14,9 @@ pip-wheel-metadata/
 venv/
 env/
 ENV/
+.env
+.env.*
+.venv/
 
 # Test and coverage
 .pytest_cache/
@@ -30,10 +31,6 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
-
-# Local environment/config
-.env
-.env.*
 
 # IDE/editor
 .vscode/

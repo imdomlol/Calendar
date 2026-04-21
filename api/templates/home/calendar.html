@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div style="margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+  <h2 style="margin:0; font-size:1.4rem;">{{ calendar_name }}</h2>
+  <form method="GET" action="{{ url_for('ui.home') }}"
+        style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <select name="calendar_id"
+            style="padding:7px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:.9rem;">
+      {% for cal in calendars %}
+        <option value="{{ cal.id }}"
+                {% if cal.id|string == selected_calendar_id %}selected{% endif %}>
+          {{ cal.name or "Untitled Calendar" }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" style="padding:7px 14px; background:#1d4ed8; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:.9rem;">Switch</button>
+  </form>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div id="cal-root" style="background:#fff; border-radius:14px;
+     box-shadow:0 1px 6px rgba(0,0,0,.09); overflow:hidden;"></div>
+
+<style>
+  .cal-day-cell { transition: background .12s; }
+  .cal-day-cell:hover { background: #e2e8f0 !important; }
+  .cal-btn {
+    background: #f1f5f9; border: none; border-radius: 8px;
+    padding: 8px 18px; cursor: pointer; font-size: .9rem; font-weight: 500;
+  }
+  .cal-btn:hover { background: #e2e8f0; }
+  .cal-btn-primary {
+    background: #3b82f6; color: #fff; border: none; border-radius: 8px;
+    padding: 8px 18px; cursor: pointer; font-size: .9rem; font-weight: 500;
+  }
+  .cal-btn-primary:hover { background: #2563eb; }
+  .cal-btn-danger {
+    background: #fee2e2; color: #b91c1c; border: none; border-radius: 8px;
+    padding: 6px 14px; cursor: pointer; font-size: .85rem;
+  }
+  .cal-btn-danger:hover { background: #fecaca; }
+  .cal-input {
+    padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px;
+    font-size: .9rem; width: 100%; box-sizing: border-box;
+  }
+</style>
+
+<script>
+const EVENTS     = {{ events | tojson }};
+const CALENDAR_ID = {{ selected_calendar_id | tojson }};
+
+const MONTHS  = ['January','February','March','April','May','June',
+                 'July','August','September','October','November','December'];
+const DAYS_S  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAYS_L  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+const today = new Date();
+let state = {
+  view: 'month',
+  year:  today.getFullYear(),
+  month: today.getMonth(),
+  day:   today.getDate(),
+};
+
+const STATE_KEY = 'home_cal_' + CALENDAR_ID;
+function saveState() { try { sessionStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch(e) {} }
+function loadState() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(STATE_KEY));
+    if (s && s.year) state = s;
+  } catch(e) {}
+}
+document.addEventListener('submit', saveState);
+
+function p2(n) { return String(n).padStart(2, '0'); }
+function ds(y, m, d) { return `${y}-${p2(m+1)}-${p2(d)}`; }
+function evDate(ts) { return ts ? ts.substring(0, 10) : null; }
+function evsByDate(dateStr) { return EVENTS.filter(e => evDate(e.start_timestamp) === dateStr); }
+function fmtTime(ts) { return ts ? ts.substring(11, 16) : ''; }
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escA(s) { return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function renderMonth() {
+  const { year, month } = state;
+  const todayStr = ds(today.getFullYear(), today.getMonth(), today.getDate());
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  const byDate = {};
+  EVENTS.forEach(e => {
+    const d = evDate(e.start_timestamp);
+    if (d) { byDate[d] = byDate[d] || []; byDate[d].push(e); }
+  });
+
+  let cells = '';
+  for (let i = 0; i < firstDow; i++)
+    cells += `<div style="min-height:72px; background:#f8fafc; border-radius:8px;"></div>`;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dStr    = ds(year, month, d);
+    const evs     = byDate[dStr] || [];
+    const isToday = dStr === todayStr;
+    const bg      = isToday ? '#3b82f6' : '#f8fafc';
+    const col     = isToday ? '#fff'    : '#1e293b';
+
+    const dots = evs.slice(0,4).map(() =>
+      `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;
+             background:${isToday ? '#bfdbfe' : '#3b82f6'};margin:1px;"></span>`
+    ).join('') + (evs.length > 4 ? `<span style="font-size:.6rem;color:${isToday?'#bfdbfe':'#64748b'};">+${evs.length-4}</span>` : '');
+
+    cells += `
+      <div class="cal-day-cell" onclick="openDay(${year},${month},${d})"
+           style="min-height:72px; background:${bg}; color:${col}; border-radius:8px;
+                  cursor:pointer; padding:8px; display:flex; flex-direction:column;">
+        <span style="font-weight:${isToday?'700':'500'}; font-size:.9rem;">${d}</span>
+        ${evs.length ? `<div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:1px;">${dots}</div>` : ''}
+        ${evs.length ? `<div style="font-size:.68rem; margin-top:auto; color:${isToday?'#bfdbfe':'#64748b'};">${evs.length} event${evs.length>1?'s':''}</div>` : ''}
+      </div>`;
+  }
+
+  return `
+    <div style="padding:20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <button class="cal-btn" onclick="shiftMonth(-1)">&#8249; Prev</button>
+        <h3 style="margin:0; font-size:1.2rem;">${MONTHS[month]} ${year}</h3>
+        <button class="cal-btn" onclick="shiftMonth(1)">Next &#8250;</button>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px;">
+        ${DAYS_S.map(d => `<div style="text-align:center; font-size:.75rem; font-weight:600;
+          color:#94a3b8; padding:4px;">${d}</div>`).join('')}
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;">
+        ${cells}
+      </div>
+    </div>`;
+}
+
+function renderDay() {
+  const { year, month, day } = state;
+  const dStr = ds(year, month, day);
+  const dow  = new Date(year, month, day).getDay();
+  const evs  = evsByDate(dStr);
+
+  let eventCards = '';
+  if (evs.length === 0) {
+    eventCards = `<p style="color:#94a3b8; text-align:center; padding:24px 0;">No events — add one below.</p>`;
+  } else {
+    evs.forEach(ev => {
+      const start  = fmtTime(ev.start_timestamp);
+      const end    = fmtTime(ev.end_timestamp);
+      const svStart = ev.start_timestamp ? ev.start_timestamp.substring(0,16) : '';
+      const svEnd   = ev.end_timestamp   ? ev.end_timestamp.substring(0,16)   : '';
+
+      eventCards += `
+        <div style="border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; font-size:1rem;">${esc(ev.title||'Untitled')}</div>
+              ${start ? `<div style="font-size:.85rem; color:#64748b; margin-top:2px;">${start}${end?' – '+end:''}</div>` : ''}
+              ${ev.description ? `<div style="font-size:.9rem; color:#475569; margin-top:6px;">${esc(ev.description)}</div>` : ''}
+            </div>
+            <button class="cal-btn" onclick="toggleEdit('${ev.id}')"
+              style="flex-shrink:0; padding:5px 12px; font-size:.82rem;">Edit</button>
+          </div>
+          <div id="edit-${ev.id}" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid #f1f5f9;">
+            <form method="POST" action="/ui/user/home/events/${ev.id}/edit?calendar_id=${CALENDAR_ID}"
+                  style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <input class="cal-input" name="title" value="${escA(ev.title||'')}" placeholder="Title" required
+                     style="grid-column:1/-1;" />
+              <input class="cal-input" type="datetime-local" name="start_timestamp" value="${svStart}" />
+              <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${svEnd}" />
+              <input class="cal-input" name="description" value="${escA(ev.description||'')}"
+                     placeholder="Description" style="grid-column:1/-1;" />
+              <div style="display:flex; gap:8px; grid-column:1/-1;">
+                <button type="submit" class="cal-btn-primary">Save</button>
+                <form method="POST" action="/ui/user/home/events/${ev.id}/delete?calendar_id=${CALENDAR_ID}" style="display:inline;">
+                  <button type="submit" class="cal-btn-danger"
+                          onclick="return confirm('Delete this event?')">Delete</button>
+                </form>
+              </div>
+            </form>
+          </div>
+        </div>`;
+    });
+  }
+
+  return `
+    <div style="padding:20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+        <button class="cal-btn" onclick="shiftDay(-1)">&#8249; Prev</button>
+        <div style="text-align:center;">
+          <div style="font-weight:700; font-size:1.1rem;">${DAYS_L[dow]}, ${MONTHS[month]} ${day}, ${year}</div>
+          <button onclick="zoomOut()" style="background:none; border:none; color:#3b82f6;
+                  cursor:pointer; font-size:.85rem; margin-top:3px; padding:0;">↩ Back to month</button>
+        </div>
+        <button class="cal-btn" onclick="shiftDay(1)">Next &#8250;</button>
+      </div>
+
+      ${eventCards}
+
+      <div style="border-top:1px solid #f1f5f9; padding-top:16px; margin-top:8px;">
+        <h4 style="margin:0 0 10px; font-size:.95rem; color:#475569;">Add Event</h4>
+        <form method="POST" action="/ui/user/home/events/create?calendar_id=${CALENDAR_ID}"
+              style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <input class="cal-input" name="title" placeholder="Event title" required
+                 style="grid-column:1/-1;" />
+          <input class="cal-input" type="datetime-local" name="start_timestamp" value="${dStr}T09:00" />
+          <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${dStr}T10:00" />
+          <input class="cal-input" name="description" placeholder="Description (optional)"
+                 style="grid-column:1/-1;" />
+          <button type="submit" class="cal-btn-primary" style="width:max-content;">Create Event</button>
+        </form>
+      </div>
+    </div>`;
+}
+
+function render() {
+  document.getElementById('cal-root').innerHTML =
+    state.view === 'month' ? renderMonth() : renderDay();
+}
+
+function openDay(y, m, d) { state.view='day'; state.year=y; state.month=m; state.day=d; render(); }
+function zoomOut()         { state.view='month'; render(); }
+
+function shiftMonth(dir) {
+  let m = state.month + dir, y = state.year;
+  if (m < 0)  { m = 11; y--; }
+  if (m > 11) { m = 0;  y++; }
+  state.month = m; state.year = y;
+  render();
+}
+
+function shiftDay(dir) {
+  const d = new Date(state.year, state.month, state.day + dir);
+  state.year = d.getFullYear(); state.month = d.getMonth(); state.day = d.getDate();
+  render();
+}
+
+function toggleEdit(id) {
+  const el = document.getElementById('edit-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+loadState();
+render();
+</script>
+{% endblock %}

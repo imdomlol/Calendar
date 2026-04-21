@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Manage Events</h1>
+  <p class="muted">Create an event and attach it to one of your calendars.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="margin-bottom:16px;">
+  <form method="GET" action="{{ url_for('ui.manage_events') }}"
+        style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <label for="calendar_id"><strong>View calendar:</strong></label>
+    <select id="calendar_id" name="calendar_id"
+            style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; min-width:240px;">
+      {% for cal in calendars %}
+        <option value="{{ cal.id }}"
+                {% if cal.id|string == selected_calendar_id %}selected{% endif %}>
+          {{ cal.name or "Untitled Calendar" }}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Load</button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+  <h4>Add Event</h4>
+  <form method="POST" action="{{ url_for('ui.create_event') }}"
+        style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+    <select name="calendar_id" required
+            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;">
+      {% for cal in calendars %}
+        <option value="{{ cal.id }}"
+                {% if cal.id|string == selected_calendar_id %}selected{% endif %}>
+          {{ cal.name or "Untitled Calendar" }}
+        </option>
+      {% endfor %}
+    </select>
+    <input type="text" name="title" placeholder="Event title" required
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
+    <input type="datetime-local" name="start_timestamp"
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
+    <input type="datetime-local" name="end_timestamp"
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
+    <input type="text" name="description" placeholder="Description (optional)"
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; grid-column:1/-1;" />
+    <button type="submit" class="btn"
+            style="border:none; cursor:pointer; margin-top:0; width:max-content;">Create Event</button>
+  </form>
+</div>
+
+<div class="card">
+  <h4>Events in selected calendar</h4>
+  <table>
+    <tr><th>Title</th><th>Start</th><th>End</th></tr>
+    {% if events %}
+      {% for event in events %}
+        <tr>
+          <td>{{ event.title or "Untitled" }}</td>
+          <td>{{ event.start_timestamp or "" }}</td>
+          <td>{{ event.end_timestamp or "" }}</td>
+        </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="3" class="muted">No events found for this calendar.</td></tr>
+    {% endif %}
+  </table>
+</div>
+{% endblock %}

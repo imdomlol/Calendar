@@ -1,0 +1,7 @@
+{% macro status_banner(status, message) %}
+  {% if message %}
+    <div class="card banner {{ 'banner-ok' if status == 'ok' else 'banner-error' }}">
+      <p>{{ message }}</p>
+    </div>
+  {% endif %}
+{% endmacro %}
