@@ -10,7 +10,7 @@ from utils.supabase_client import get_supabase_client
 
 
 @ui_bp.route("/login", methods=["GET", "POST"])
-def calauth_login():
+def login():
     # if something goes wrong we put the message here
     error = ""
     # get the info message from the url if there is one
@@ -76,7 +76,7 @@ def calauth_login():
 
 
 @ui_bp.route("/register", methods=["GET", "POST"])
-def calauth_register():
+def register():
     # no error yet
     error = None
     # get the next path from the url or default to dashboard
@@ -134,7 +134,7 @@ def calauth_register():
     )
 
 @ui_bp.route("/logout")
-def calauth_logout():
+def logout():
     # remove the user from the session
     # session.pop does nothing if the key isnt there
     session.pop("ui_user", None)
