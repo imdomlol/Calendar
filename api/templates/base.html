@@ -9,30 +9,34 @@
 <body>
   <div class="topbar">
     <div class="brand"><a href="{{ url_for('ui.brand_home') }}">Calendar System</a></div>
-    <div class="top-links">
-      {% if ui_user %}
-      <a href="{{ url_for('ui.logout') }}">Log Out</a>
-      {% else %}
-      <a href="{{ url_for('ui.login', next=request.path) }}">Log In</a>
-      <a href="{{ url_for('ui.register', next=request.path) }}">Register</a>
-      {% endif %}
+    {% if not hide_chrome %}
+    <div class="user-menu" id="userMenu">
+      <button class="user-menu-btn" onclick="toggleUserMenu()" aria-label="Menu" aria-expanded="false" id="userMenuBtn">
+        <span class="user-menu-icon">&#9776;</span>
+      </button>
+      <div class="user-menu-dropdown" id="userMenuDropdown">
+        {% if ui_user %}
+        {% for item in features_nav %}
+        <a href="{{ item.href }}">{{ item.label }}</a>
+        {% endfor %}
+        <a href="{{ url_for('ui.settings_page') }}">&#9881;&nbsp; Settings</a>
+        <div class="user-menu-divider"></div>
+        <a href="{{ url_for('ui.logout') }}">Log Out</a>
+        {% else %}
+        <a href="{{ url_for('ui.login', next=request.path) }}">Log In</a>
+        <a href="{{ url_for('ui.register', next=request.path) }}">Register</a>
+        {% endif %}
+      </div>
     </div>
+    {% endif %}
   </div>
 
-  <div class="layout">
-    <aside class="sidebar">
-      <div>
-      {% for item in features_nav %}
-        <a href="{{ item.href }}">{{ item.label }}</a>
-      {% endfor %}
-      </div>
-      <a class="settings-btn" href="{{ url_for('ui.settings_page') }}" aria-label="Settings">&#9881;</a>
-    </aside>
-
+  <div class="layout" id="layout">
     <main class="content">
       {% block content %}{% endblock %}
     </main>
   </div>
+
   {% if build_info %}
   <footer class="build-footer">
     Build:
@@ -40,5 +44,22 @@
     {% if build_info.date %}&nbsp;&middot;&nbsp;{{ build_info.date }}{% endif %}
   </footer>
   {% endif %}
+
+  <script>
+    function toggleUserMenu() {
+      var menu = document.getElementById('userMenu');
+      var btn = document.getElementById('userMenuBtn');
+      var open = menu.classList.toggle('user-menu--open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    document.addEventListener('click', function(e) {
+      var menu = document.getElementById('userMenu');
+      if (menu && !menu.contains(e.target)) {
+        menu.classList.remove('user-menu--open');
+        var btn = document.getElementById('userMenuBtn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  </script>
 </body>
 </html>

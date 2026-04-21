@@ -17,9 +17,8 @@ class Calendar:
         Opposite of the add function. Remove the member from the list, thus removing access to calendar.
 '''
 
-from typing import Any
-
 from utils.supabase_client import get_supabase_client
+from typing import Any
 
 class InvalidUserID(Exception):                         # Custom Error raised for add_member()
     pass                                                # Invalid ID: Length, Characters, DNE, etc.
@@ -40,7 +39,9 @@ class Calendar:
         self.age_timestamp = None                       # Will be set when the calendar is saved to the database
 
     def to_record(self) -> dict[str, Any]:
-        return {
+        # build the dict to insert into supabase
+        # keys need to match the column names in the calendars table
+        rec = {
             "id": self.id,
             "name": self.name,
             "owner_id": self.owner_id,
@@ -48,6 +49,8 @@ class Calendar:
             "events": self.events,
             "age_timestamp": self.age_timestamp,
         }
+        return rec
+
 
     def save(self) -> Any:
         supabase = get_supabase_client()

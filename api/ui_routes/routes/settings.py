@@ -1,32 +1,41 @@
-# settings page and Google Calendar integration routes (OAuth connect, sync pull, event push, disconnect)
 import json
-import urllib.error
 import urllib.request as urlreq
-
 from flask import redirect, request, session, url_for
+import urllib.error
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
     _get_ui_supabase_client,
     _google_oauth_config,
-    _resolve_app_base_url,
-    _ui_user,
-    guest_nav,
     render_page,
     ui_login_required,
-    user_nav,
 )
+from api.ui_routes.helpers import _resolve_app_base_url, _ui_user, guest_nav, user_nav
 
 
 def _clear_oauth_session():
+    # this function removes the google oauth stuff from the session
+    # we call it when oauth finishes or when something goes wrong
+    # it cleans up so there is no leftover data in the session
+    # first we remove the state value
+    # the state is a random string we use to check that nothing tampered with the flow
     session.pop("google_oauth_state", None)
+    # now remove the redirect uri we saved earlier
+    # the redirect uri is the url we told google to send the user back to
+    # we stored it in the session before starting oauth so we clean it up here
     session.pop("google_oauth_redirect_uri", None)
+    # the function doesnt return anything it just removes stuff
 
 
 @ui_bp.route("/settings")
 def settings_page():
+    # get the current user from the session
     user = _ui_user()
-    role = "user" if user else "guest"
+    # check if user is logged in to figure out the role
+    if user:
+        role = "user"
+    else:
+        role = "guest"
     nav = user_nav() if user else guest_nav()
 
     if not user:
@@ -34,7 +43,7 @@ def settings_page():
 
     status = (request.args.get("status") or "").strip()
     message = (request.args.get("message") or "").strip()
-    user_id = user.get("id")
+    userId = user.get("id")
     google_rows = []
 
     try:
@@ -42,7 +51,7 @@ def settings_page():
         result = (
             supabase.table("externals")
             .select("id, provider, url")
-            .eq("user_id", user_id)
+            .eq("user_id", userId)
             .execute()
         )
         all_rows = result.data or []
@@ -65,21 +74,19 @@ def settings_page():
         google_rows=google_rows,
     )
 
-
-# --- google OAuth ---
 @ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])
 @ui_login_required
 def settings_connect_google():
     return redirect(url_for("ui.settings_login_google"))
 
 
+
 @ui_bp.route("/settings/external/google/login")
 @ui_login_required
 def settings_login_google():
-    """Starts the Google OAuth2 flow; saves state and redirect URI in session for the callback to verify."""
-    client_id, client_secret = _google_oauth_config()
+    clientId, client_secret = _google_oauth_config()
 
-    if not client_id or not client_secret:
+    if not clientId or not client_secret:
         return redirect(
             url_for(
                 "ui.settings_page",
@@ -102,18 +109,18 @@ def settings_login_google():
             )
         )
 
-    app_base_url = _resolve_app_base_url()
-    redirect_uri = f"{app_base_url}{url_for('ui.settings_google_callback')}"
+    appBaseUrl = _resolve_app_base_url()
+    redirect_uri = f"{appBaseUrl}{url_for('ui.settings_google_callback')}"
 
     oauth = OAuth2Session(
-        client_id,
+        clientId,
         redirect_uri=redirect_uri,
         scope=[
             "https://www.googleapis.com/auth/calendar.events",
             "https://www.googleapis.com/auth/calendar.readonly",
         ],
     )
-    # offline access_type gets a refresh token; prompt="consent" ensures it is always returned
+
     authorization_url, state = oauth.authorization_url(
         "https://accounts.google.com/o/oauth2/auth",
         access_type="offline",
@@ -128,12 +135,11 @@ def settings_login_google():
 @ui_bp.route("/settings/external/google/callback")
 @ui_login_required
 def settings_google_callback():
-    """Completes the OAuth2 flow after Google redirects back; upserts the access and refresh tokens in externals."""
-    expected_state = (session.get("google_oauth_state") or "").strip()
-    returned_state = (request.args.get("state") or "").strip()
+    exp_state = (session.get("google_oauth_state") or "").strip()
+    ret_state = (request.args.get("state") or "").strip()
 
-    # state param prevents CSRF by matching what we stored in session before the redirect
-    if not expected_state or returned_state != expected_state:
+    # check the state matches what we stored before the oauth redirect
+    if not exp_state or ret_state != exp_state:
         _clear_oauth_session()
         return redirect(
             url_for(
@@ -143,7 +149,7 @@ def settings_google_callback():
             )
         )
 
-    client_id, client_secret = _google_oauth_config()
+    clientId, client_secret = _google_oauth_config()
     redirect_uri = (session.get("google_oauth_redirect_uri") or "").strip()
 
     try:
@@ -158,7 +164,7 @@ def settings_google_callback():
             )
         )
 
-    if not client_id or not client_secret or not redirect_uri:
+    if not clientId or not client_secret or not redirect_uri:
         _clear_oauth_session()
         return redirect(
             url_for(
@@ -170,45 +176,45 @@ def settings_google_callback():
 
     try:
         oauth = OAuth2Session(
-            client_id, redirect_uri=redirect_uri, state=expected_state
+            clientId, redirect_uri=redirect_uri, state=exp_state
         )
-        credentials = oauth.fetch_token(
+        creds = oauth.fetch_token(
             "https://oauth2.googleapis.com/token",
             client_secret=client_secret,
             authorization_response=request.url,
         )
 
-        user_id = _ui_user()["id"]
+        uid = _ui_user()["id"]
         provider_url = "https://www.googleapis.com/calendar/v3"
         supabase = _get_ui_supabase_client()
 
         existing = (
             supabase.table("externals")
             .select("id")
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .eq("provider", "google")
             .eq("url", provider_url)
             .execute()
         )
 
-        # upsert: refresh tokens on an existing connection or create a new one
+        # upsert: update tokens if connection exists or create a new one
         if existing.data:
-            update_payload = {}
-            if credentials.get("access_token"):
-                update_payload["access_token"] = credentials["access_token"]
-            if credentials.get("refresh_token"):
-                update_payload["refresh_token"] = credentials["refresh_token"]
-            if update_payload:
-                supabase.table("externals").update(update_payload).eq(
+            updateData = {}
+            if creds.get("access_token"):
+                updateData["access_token"] = creds["access_token"]
+            if creds.get("refresh_token"):
+                updateData["refresh_token"] = creds["refresh_token"]
+            if updateData:
+                supabase.table("externals").update(updateData).eq(
                     "id", existing.data[0]["id"]
-                ).eq("user_id", user_id).execute()
+                ).eq("user_id", uid).execute()
             message = "Google connection refreshed."
         else:
-            payload = {"user_id": user_id, "provider": "google", "url": provider_url}
-            if credentials.get("access_token"):
-                payload["access_token"] = credentials["access_token"]
-            if credentials.get("refresh_token"):
-                payload["refresh_token"] = credentials["refresh_token"]
+            payload = {"user_id": uid, "provider": "google", "url": provider_url}
+            if creds.get("access_token"):
+                payload["access_token"] = creds["access_token"]
+            if creds.get("refresh_token"):
+                payload["refresh_token"] = creds["refresh_token"]
             result = supabase.table("externals").insert(payload).execute()
             created_id = (result.data or [{}])[0].get("id") or "new row"
             message = f"Google connection created (id: {created_id})."
@@ -227,12 +233,12 @@ def settings_google_callback():
         )
 
 
-# --- google sync ---
+
+
 @ui_bp.route("/settings/external/google/<external_id>/sync", methods=["POST"])
 @ui_login_required
 def settings_sync_google(external_id):
-    """Pulls up to 250 events from the user's primary Google Calendar into a local synced calendar."""
-    user_id = _ui_user()["id"]
+    uid = _ui_user()["id"]
 
     try:
         supabase = _get_ui_supabase_client()
@@ -241,7 +247,7 @@ def settings_sync_google(external_id):
             supabase.table("externals")
             .select("id, access_token")
             .eq("id", external_id)
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .single()
             .execute()
         )
@@ -272,7 +278,7 @@ def settings_sync_google(external_id):
         )
         try:
             with urlreq.urlopen(req) as resp:
-                google_events = json.loads(resp.read().decode("utf-8")).get("items", [])
+                gEvents = json.loads(resp.read().decode("utf-8")).get("items", [])
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
                 return redirect(
@@ -287,11 +293,11 @@ def settings_sync_google(external_id):
         cal_result = (
             supabase.table("calendars")
             .select("id")
-            .eq("owner_id", user_id)
+            .eq("owner_id", uid)
             .eq("name", "Google Calendar (Synced)")
             .execute()
         )
-        # find or create the dedicated import calendar so synced events stay separate from local ones
+        # find or create the import calendar so synced events stay separate
         if cal_result.data:
             calendar_id = str(cal_result.data[0]["id"])
         else:
@@ -300,8 +306,8 @@ def settings_sync_google(external_id):
                 .insert(
                     {
                         "name": "Google Calendar (Synced)",
-                        "owner_id": user_id,
-                        "member_ids": [user_id],
+                        "owner_id": uid,
+                        "member_ids": [uid],
                         "events": [],
                     }
                 )
@@ -310,13 +316,14 @@ def settings_sync_google(external_id):
             calendar_id = str(new_cal.data[0]["id"])
 
         payloads = []
-        for g_event in google_events:
+        for i in range(0, len(gEvents)):
+            g_event = gEvents[i]
             start = g_event.get("start", {})
             end = g_event.get("end", {})
             payload = {
                 "title": g_event.get("summary") or "Untitled Event",
                 "calendar_ids": [calendar_id],
-                "owner_id": user_id,
+                "owner_id": uid,
                 "start_timestamp": start.get("dateTime") or start.get("date"),
                 "end_timestamp": end.get("dateTime") or end.get("date"),
             }
@@ -324,7 +331,7 @@ def settings_sync_google(external_id):
                 payload["description"] = g_event["description"]
             payloads.append(payload)
 
-        if payloads:
+        if len(payloads) > 0:
             supabase.table("events").insert(payloads).execute()
         inserted = len(payloads)
 
@@ -341,12 +348,10 @@ def settings_sync_google(external_id):
             url_for("ui.settings_page", status="error", message=f"Sync failed: {exc}")
         )
 
-
 @ui_bp.route("/settings/external/google/<external_id>/push", methods=["POST"])
 @ui_login_required
 def settings_push_google(external_id):
-    """Pushes all local non-synced events to the user's primary Google Calendar one at a time."""
-    user_id = _ui_user()["id"]
+    uid = _ui_user()["id"]
 
     try:
         supabase = _get_ui_supabase_client()
@@ -355,7 +360,7 @@ def settings_push_google(external_id):
             supabase.table("externals")
             .select("id, access_token")
             .eq("id", external_id)
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .single()
             .execute()
         )
@@ -377,11 +382,11 @@ def settings_push_google(external_id):
                 )
             )
 
-        # excludes the "Google Calendar (Synced)" import calendar to avoid pushing synced events back
+        # skip the synced import calendar to avoid pushing those events back
         cals_result = (
             supabase.table("calendars")
             .select("id")
-            .eq("owner_id", user_id)
+            .eq("owner_id", uid)
             .neq("name", "Google Calendar (Synced)")
             .execute()
         )
@@ -413,7 +418,6 @@ def settings_push_google(external_id):
                 )
             )
 
-        # fetch the primary calendar timezone so events land at the correct local time on Google's end
         cal_tz = "UTC"
         try:
             tz_req = urlreq.Request(
@@ -425,14 +429,11 @@ def settings_push_google(external_id):
                     "timeZone", "UTC"
                 )
         except Exception:
-            pass  # fall back to UTC if the lookup fails
+            pass
 
-        # converts a stored timestamp to a Google Calendar time object with the correct timezone applied
         def _as_time_obj(ts):
             ts = str(ts)
             if "T" in ts or len(ts) > 10:
-                # timestamps are local time that PostgreSQL tagged as +00:00; strip the offset so Google
-                # applies the calendar timezone instead of treating the value as UTC
                 clean_ts = ts.replace("+00:00", "").replace("Z", "")
                 return {"dateTime": clean_ts, "timeZone": cal_tz}
             return {"date": ts}
@@ -443,17 +444,16 @@ def settings_push_google(external_id):
             "Content-Type": "application/json",
         }
 
-        # TODO: pushing one event per request is slow; Google Calendar batch API would help here
         pushed = 0
         for event in local_events:
-            start_ts = event.get("start_timestamp")
-            if not start_ts:
-                continue  # Google Calendar requires a start time
+            startTs = event.get("start_timestamp")
+            if not startTs:
+                continue
 
-            end_ts = event.get("end_timestamp") or start_ts
+            end_ts = event.get("end_timestamp") or startTs
             body = {
                 "summary": event.get("title") or "Untitled Event",
-                "start": _as_time_obj(start_ts),
+                "start": _as_time_obj(startTs),
                 "end": _as_time_obj(end_ts),
             }
             if event.get("description"):
@@ -497,11 +497,10 @@ def settings_push_google(external_id):
         )
 
 
-# --- disconnect ---
 @ui_bp.route("/settings/external/google/<external_id>/disconnect", methods=["POST"])
 @ui_login_required
 def settings_disconnect_google(external_id):
-    user_id = _ui_user()["id"]
+    uid = _ui_user()["id"]
 
     try:
         supabase = _get_ui_supabase_client()
@@ -509,19 +508,21 @@ def settings_disconnect_google(external_id):
             supabase.table("externals")
             .select("id, provider")
             .eq("id", external_id)
-            .eq("user_id", user_id)
+            .eq("user_id", uid)
             .execute()
         )
 
         rows = existing.data or []
-        if not rows:
+        if len(rows) == 0:
             return redirect(
                 url_for(
                     "ui.settings_page", status="error", message="Connection not found."
                 )
             )
 
-        if "google" not in str(rows[0].get("provider") or "").lower():
+        provName = str(rows[0].get("provider") or "").lower()
+        isGoogle = "google" in provName
+        if isGoogle == False:
             return redirect(
                 url_for(
                     "ui.settings_page",
@@ -531,7 +532,7 @@ def settings_disconnect_google(external_id):
             )
 
         supabase.table("externals").delete().eq("id", external_id).eq(
-            "user_id", user_id
+            "user_id", uid
         ).execute()
         return redirect(
             url_for(
