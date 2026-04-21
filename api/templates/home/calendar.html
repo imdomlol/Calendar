@@ -206,7 +206,7 @@ function renderDay() {
 
       <div style="border-top:1px solid #f1f5f9; padding-top:16px; margin-top:8px;">
         <h4 style="margin:0 0 10px; font-size:.95rem; color:#475569;">Add Event</h4>
-        <form method="POST" action="/ui/user/home/events/create?calendar_id=${CALENDAR_ID}"
+        <form method="POST" action="/ui/user/events/create?calendar_id=${CALENDAR_ID}"
               style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
           <input class="cal-input" name="title" placeholder="Event title" required
                  style="grid-column:1/-1;" />
