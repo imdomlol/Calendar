@@ -5,6 +5,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from flask import abort, g, request
+from utils.logger import logEvent
 
 
 def require_auth(f):
@@ -13,6 +14,7 @@ def require_auth(f):
         # grab the token from the header.
         token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if not token:
+            logEvent("WARNING", "auth", "missing token", path=request.path, method=request.method)
             abort(401)
 
         # supabase project URL + key are required to validate
@@ -35,18 +37,22 @@ def require_auth(f):
             with urlopen(req, timeout=15) as response:
                 status = getattr(response, "status", response.getcode())
                 if status < 200 or status >= 300:
+                    logEvent("WARNING", "auth", "token rejected by supabase", path=request.path, method=request.method)
                     abort(401)
                 raw = response.read().decode("utf-8")
                 user = json.loads(raw or "{}")
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            logEvent("WARNING", "auth", "token validation failed", path=request.path, method=request.method)
             abort(401)
 
         # if supabase does not return a real user id, treat it as unauthorized
         if not isinstance(user, dict) or not user.get("id"):
+            logEvent("WARNING", "auth", "token has no user id", path=request.path, method=request.method)
             abort(401)
 
         user.setdefault("sub", user["id"])
         g.user = user
+        logEvent("INFO", "auth", "token valid", userId=user["id"], path=request.path, method=request.method)
 
         return f(*args, **kwargs)
 
