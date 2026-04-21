@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Manage Calendars</h1>
+  <p class="muted">Create calendars in Supabase. Owner id is auto-filled from your login.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="margin-bottom:16px;">
+  <h4>Available actions</h4>
+  <p>Create Calendar &bull; Add Member &bull; Remove Member &bull; Manage Events &bull; Remove Calendar &bull; Guest Link Sharing</p>
+  <p class="muted">Logged in as owner id: {{ owner_id }}</p>
+  <form method="POST" action="{{ url_for('ui.create_calendar') }}"
+        style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+    <input type="text" name="name" placeholder="Calendar name (required)" required
+           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
+    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Create Calendar</button>
+  </form>
+</div>
+
+{% if not has_guest_link_fields %}
+  <div class="card banner banner-error">
+    <p>
+      Guest links need DB columns on calendars: guest_link_token (text), guest_link_role (text), guest_link_active (boolean).
+    </p>
+  </div>
+{% endif %}
+
+{% if calendars %}
+  <div class="grid">
+    {% for cal in calendars %}
+      <div class="card">
+        <div class="pill">Calendar #{{ cal.id }}</div>
+        <h4>{{ cal.name or "Untitled" }}</h4>
+        <p>Owner ID: {{ cal.owner_id }}</p>
+        <p>Events linked: {{ (cal.events or [])|length }}</p>
+        <p><strong>Actions:</strong> Create event, edit event, delete event, manage members, remove calendar</p>
+
+        <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+          <p><strong>Guest Link Access</strong></p>
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <p class="muted" style="word-break: break-all;">
+              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
+            </p>
+            <p class="muted">Current role: {{ cal.guest_link_role or 'viewer' }}</p>
+          {% else %}
+            <p class="muted">No active guest link.</p>
+          {% endif %}
+
+          <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
+                style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+            <label for="role-{{ cal.id }}" class="muted">Access role</label>
+            <select id="role-{{ cal.id }}" name="role"
+                    style="padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
+              <option value="viewer">Viewer (read-only)</option>
+              <option value="editor">Editor (anonymous edits)</option>
+            </select>
+            <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">
+              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
+            </button>
+          </form>
+
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:8px;">
+              <button type="submit" class="btn danger" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
+            </form>
+          {% endif %}
+        </div>
+
+        <ul>
+          {% if cal.member_ids %}
+            {% for m in cal.member_ids %}
+              <li>{{ m }}</li>
+            {% endfor %}
+          {% else %}
+            <li>No members yet</li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <h3>No calendars found</h3>
+    <p>No calendar rows exist for this owner id yet.</p>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+  <h1>Remove Account</h1>
+  <p class="muted">This is a placeholder confirmation screen.</p>
+</div>
+<div class="card">
+  <h4>Danger Zone</h4>
+  <p>This action would permanently remove the user's account.</p>
+  <a class="btn danger" href="{{ url_for('ui.dashboard', role='user') }}">Confirm removal</a>
+</div>
+{% endblock %}
