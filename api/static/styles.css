@@ -158,6 +158,20 @@ th { background: #eff6ff; }
   border-radius: 16px;
 }
 .banner { margin-bottom: 16px; }
+.externals-table { table-layout: fixed; }
+.externals-table th:nth-child(1), .externals-table td:nth-child(1) { width: 90px; }
+.externals-table th:nth-child(2), .externals-table td:nth-child(2) { width: 30%; }
+.externals-table th:nth-child(3), .externals-table td:nth-child(3) { width: 30%; }
+.externals-table th:nth-child(4), .externals-table td:nth-child(4) { width: auto; }
+.cell-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0;
+}
+.cell-mono { font-family: monospace; font-size: 13px; }
+.cell-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.btn-sm { padding: 6px 10px; font-size: 13px; }
 .banner-ok { background: #dcfce7; border-color: #86efac; }
 .banner-error { background: #fee2e2; border-color: #fca5a5; }
 .build-footer {
