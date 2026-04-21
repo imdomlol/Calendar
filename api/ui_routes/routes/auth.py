@@ -1,6 +1,5 @@
 from flask import redirect, request, session, url_for
 from api.ui_routes import ui_bp
-
 from api.ui_routes.helpers import (
     _format_login_error,
     guest_nav,
@@ -11,77 +10,112 @@ from utils.supabase_client import get_supabase_client
 
 
 @ui_bp.route("/login", methods=["GET", "POST"])
-def login():
+def calauth_login():
+    # if something goes wrong we put the message here
     error = ""
+    # get the info message from the url if there is one
     info = (request.args.get("info") or "").strip()
-    nextPath = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+    # figure out where to send the user after login
+    # we check the next param first and fall back to dashboard
+    nextPath = (
+        (request.args.get("next") or "").strip()
+        or url_for("ui.dashboard", role="user")
+    )
     # only allow relative paths to stop open redirects
+    # if the path doesnt start with / we dont trust it
     if not nextPath.startswith("/"):
         nextPath = url_for("ui.dashboard", role="user")
 
+    # check if the request is a form submission
     if request.method == "POST":
+        # get email and password from the form
         email = (request.form.get("email") or "").strip()
         password = request.form.get("password") or ""
 
         # check if email or password is empty
         # if either one is empty we cant log in
         if len(email) == 0 or len(password) == 0:
-            error = "Email and password are required."
+            error = "Email and password are required"
         else:
             try:
-                sb = get_supabase_client()
-                result = sb.auth.sign_in_with_password({"email": email, "password": password})
+                # get the supabase client so we can talk to the database
+                calDb = get_supabase_client()
+                result = calDb.auth.sign_in_with_password(
+                    {"email": email, "password": password}
+                )
                 # supabase returns objects not plain dicts so we use getattr
+                # getattr lets us safely get attributes without crashing
                 user_obj = getattr(result, "user", None)
-                session_obj = getattr(result, "session", None)
+                sess_obj = getattr(result, "session", None)
                 uid = getattr(user_obj, "id", None)
-                access_token = getattr(session_obj, "access_token", None)
+                access_tok = getattr(sess_obj, "access_token", None)
+                # check if we got a user id back
+                # if uid is None the login didnt work
                 has_uid = uid is not None
                 if has_uid == False:
-                    error = "Login failed."
+                    error = "Wrong email or password"
                 else:
+                    # save the user info to the flask session
+                    # this is how we remember who is logged in between requests
                     session["ui_user"] = {
                         "id": uid,
                         "email": getattr(user_obj, "email", email),
-                        "access_token": access_token,
+                        "access_token": access_tok,
                     }
+                    # send them to wherever they were trying to go
                     return redirect(nextPath)
-            except Exception as exc:
-                error = _format_login_error(exc)
+            except Exception as e:
+                error = _format_login_error(e)
 
-    return render_page("Log In", "guest", guest_nav(), "auth/login.html",
-                       error=error, info=info, next_path=nextPath, hide_chrome=True)
-
-
-
+    # render the login page and pass along any error or info messages
+    return render_page(
+        "Log In", "guest", guest_nav(), "auth/login.html",
+        error=error, info=info, next_path=nextPath, hide_chrome=True,
+    )
 
 
 
 @ui_bp.route("/register", methods=["GET", "POST"])
-def register():
-    error = ""
-    next_path = (request.args.get("next") or "").strip() or url_for("ui.dashboard", role="user")
+def calauth_register():
+    # no error yet
+    error = None
+    # get the next path from the url or default to dashboard
+    next_path = (
+        (request.args.get("next") or "").strip()
+        or url_for("ui.dashboard", role="user")
+    )
+    # make sure the next path is relative so we dont redirect to random sites
     if not next_path.startswith("/"):
         next_path = url_for("ui.dashboard", role="user")
 
     if request.method == "POST":
+        # get all the fields from the registration form
         name = (request.form.get("name") or "").strip()
         email = (request.form.get("email") or "").strip()
         password = request.form.get("password") or ""
-        confirm_password = request.form.get("confirm_password") or ""
+        # this is the second password field the user types to confirm they typed it right
+        confirm_pwd = request.form.get("confirm_password") or ""
 
-        if not email or not password:
+        # make sure email and password are not empty
+        if len(email) == 0 or len(password) == 0:
             error = "Email and password are required."
-        elif password != confirm_password:
-            error = "Passwords do not match."
+        elif password != confirm_pwd:
+            # the two passwords the user typed dont match
+            error = "PASSWORDS DON'T MATCH"
         else:
             try:
-                supabase = get_supabase_client()
-                app_base_url = _resolve_app_base_url()
-                options = {"email_redirect_to": f"{app_base_url}{url_for('ui.login')}"}
+                calDb = get_supabase_client()
+                appBaseUrl = _resolve_app_base_url()
+                # build the options dict for supabase signup
+                # email_redirect_to is where supabase sends the confirmation link
+                options = {"email_redirect_to": f"{appBaseUrl}{url_for('ui.login')}"}
+                # only add the name if the user actually typed one
                 if name:
                     options["data"] = {"name": name}
-                supabase.auth.sign_up({"email": email, "password": password, "options": options})
+                calDb.auth.sign_up(
+                    {"email": email, "password": password, "options": options}
+                )
+                # registration worked so send them to login with a message
                 return redirect(url_for(
                     "ui.login",
                     next=next_path,
@@ -90,21 +124,20 @@ def register():
                         "before logging in."
                     ),
                 ))
-            except Exception as exc:
-                error = f"Could not register: {exc}"
+            except Exception as err:
+                error = f"signup failed for {email}: {err}"
 
-    return render_page("Register", "guest", guest_nav(), "auth/register.html",
-                       error=error, next_path=next_path, hide_chrome=True)
+    # show the register page
+    return render_page(
+        "Register", "guest", guest_nav(), "auth/register.html",
+        error=error, next_path=next_path, hide_chrome=True,
+    )
 
 @ui_bp.route("/logout")
-def logout():
-    # this function logs the user out
-    # we do this by removing the user from the flask session
-    # session is where flask stores info about who is logged in
-    # session.pop removes the key called ui_user from the session
-    # if ui_user isnt there it just does nothing because of the None default
+def calauth_logout():
+    # remove the user from the session
+    # session.pop does nothing if the key isnt there
     session.pop("ui_user", None)
-    # now we need to send the user to the home page
-    # they are logged out so home makes sense
-    homeUrl = url_for("ui.home") #get url for the home page
+    # get the home page url then redirect there
+    homeUrl = url_for("ui.home") #home page url
     return redirect(homeUrl)
