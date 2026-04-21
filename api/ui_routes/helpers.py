@@ -1,48 +1,41 @@
 import calendar as pycalendar
-import os
-import subprocess
-from datetime import date, datetime
 from functools import wraps
+import os
+from datetime import date
+import subprocess
+from datetime import datetime
 
 from flask import redirect, render_template, request, session, url_for
 
 from utils.supabase_client import get_supabase_client
 
-# ---------------------------------------------------------------------------
-# Build info (computed once at startup)
-# ---------------------------------------------------------------------------
 
 def _compute_build_info():
-    # Vercel injects these env vars at deploy time
     sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "").strip()
-    short_sha = sha[:7] if sha else ""
-    commit_date = ""
+    shortSha = sha[:7] if sha else ""
+    commitDate = ""
 
     try:
-        result = subprocess.run(
+        res = subprocess.run(
             ["git", "log", "-1", "--format=%h|||%cd", "--date=format:%b %d %Y, %H:%M"],
             capture_output=True, text=True, timeout=2,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split("|||", 1)
-            if not short_sha:
-                short_sha = parts[0]
+        if res.returncode == 0 and res.stdout.strip():
+            parts = res.stdout.strip().split("|||", 1)
+            if not shortSha:
+                shortSha = parts[0]
             if len(parts) > 1:
-                commit_date = parts[1]
+                commitDate = parts[1]
     except Exception:
         pass
 
-    if not short_sha and not commit_date:
+    if not shortSha and not commitDate:
         return None
-    return {"sha": short_sha, "date": commit_date}
+    return {"sha": shortSha, "date": commitDate}
 
 
 BUILD_INFO = _compute_build_info()
 
-
-# ---------------------------------------------------------------------------
-# Placeholder data (demo / not yet persisted)
-# ---------------------------------------------------------------------------
 
 placeholder_calendars = [
     {"id": 1, "name": "Work Calendar", "owner": "Alice"},
@@ -63,26 +56,23 @@ placeholder_logs = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Session helpers
-# ---------------------------------------------------------------------------
-
 def _ui_user():
-    user = session.get("ui_user")
-    if isinstance(user, dict) and user.get("id"):
-        return user
+    usr = session.get("ui_user")
+    isDict = isinstance(usr, dict)
+    if isDict == True and usr.get("id"):
+        return usr
     return None
 
 
-def _get_ui_supabase_client():
-    user = _ui_user() or {}
-    access_token = user.get("access_token")
-    if not access_token:
-        raise RuntimeError("Login session expired. Please log in again.")
-    supabase = get_supabase_client()
-    supabase.postgrest.auth(access_token)
-    return supabase
 
+def _get_ui_supabase_client():
+    userData = _ui_user() or {}
+    tok = userData.get("access_token")
+    if not tok:
+        raise RuntimeError("Login session expired. Please log in again.")
+    sb = get_supabase_client()
+    sb.postgrest.auth(tok)
+    return sb
 
 def ui_login_required(view_func):
     @wraps(view_func)
@@ -93,16 +83,12 @@ def ui_login_required(view_func):
     return wrapped
 
 
-# ---------------------------------------------------------------------------
-# Formatting helpers
-# ---------------------------------------------------------------------------
-
 def _format_login_error(exception):
-    message = (getattr(exception, "message", None) or str(exception) or "").strip()
+    msg = (getattr(exception, "message", None) or str(exception) or "").strip()
     code = (getattr(exception, "code", None) or "").strip()
 
-    normalized = message.lower()
-    if "email not confirmed" in normalized or code == "email_not_confirmed":
+    norm = msg.lower() #normalize so we can compare easily
+    if "email not confirmed" in norm or code == "email_not_confirmed":
         if code:
             return (
                 "Your account is not verified yet. Check your email for the verification link "
@@ -111,22 +97,37 @@ def _format_login_error(exception):
         return "Your account is not verified yet. Check your email for the verification link and try again."
 
     if code:
-        return f"Login failed: {message} (code: {code})"
+        return f"Login failed: {msg} (code: {code})"
 
     return "Invalid credentials."
 
 
-def _resolve_app_base_url():
-    app_base_url = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
-    if not app_base_url:
-        app_base_url = request.url_root.rstrip("/")
-    return app_base_url
 
+
+def _resolve_app_base_url():
+    # this function figures out what the base url of the app is
+    # we need this so we can build full urls for things like oauth redirects
+    # first we check if there is an environment variable set for it
+    # os.environ.get returns None if the variable doesnt exist
+    # we use or "" so we always have a string not None
+    baseUrl = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+    # now check if we got a url from the environment
+    # if baseUrl is empty that means the env var was not set
+    if not baseUrl:
+        # fall back to getting the root url from the current request
+        # request.url_root is like http://localhost:5000/
+        # we use rstrip to remove the trailing slash
+        baseUrl = request.url_root.rstrip("/")
+    # return whatever url we ended up with
+    return baseUrl
 
 def _google_oauth_config():
-    client_id = (os.environ.get("GOOGLE_CLIENT_ID") or "").strip()
-    client_secret = (os.environ.get("GOOGLE_CLIENT_SECRET") or "").strip()
-    return client_id, client_secret
+    # this just reads the google oauth credentials from env vars
+    # we need both of these to do the oauth flow
+    cId = (os.environ.get("GOOGLE_CLIENT_ID") or "").strip()
+    cSecret = (os.environ.get("GOOGLE_CLIENT_SECRET") or "").strip()
+    return cId, cSecret
+
 
 
 def build_month_preview_data(events_for_calendar):
@@ -134,7 +135,7 @@ def build_month_preview_data(events_for_calendar):
     year = today.year
     month = today.month
 
-    event_counts: dict[int, int] = {}
+    evtCounts = {}
     for event in events_for_calendar:
         raw = str(event.get("start_timestamp") or "")
         try:
@@ -142,11 +143,20 @@ def build_month_preview_data(events_for_calendar):
         except ValueError:
             continue
         if dt.year == year and dt.month == month:
-            event_counts[dt.day] = event_counts.get(dt.day, 0) + 1
+            if dt.day in evtCounts:
+                evtCounts[dt.day] = evtCounts[dt.day] + 1
+            else:
+                evtCounts[dt.day] = 1
 
     weeks = []
     for week in pycalendar.monthcalendar(year, month):
-        row = [{"day": d if d != 0 else None, "count": event_counts.get(d, 0)} for d in week]
+        row = []
+        for d in week:
+            if d != 0:
+                dayVal = d
+            else:
+                dayVal = None
+            row.append({"day": dayVal, "count": evtCounts.get(d, 0)})
         weeks.append(row)
 
     return {
@@ -155,27 +165,33 @@ def build_month_preview_data(events_for_calendar):
     }
 
 
-# ---------------------------------------------------------------------------
-# Navigation builders
-# ---------------------------------------------------------------------------
-
 def guest_nav():
-    return [
-        {"label": "View Calendars", "href": url_for("ui.view_calendars")},
-        {"label": "View Events", "href": url_for("ui.view_events")},
-    ]
-
+    # this builds the nav list for guests
+    # guests are users who are not logged in
+    # we return a list where each item has a label and an href
+    # label is the text that shows in the nav
+    # href is the url it goes to when clicked
+    # url_for turns a function name into an actual url
+    navList = []
+    navList.append({"label": "View Calendars", "href": url_for("ui.view_calendars")})
+    navList.append({"label": "View Events", "href": url_for("ui.view_events")})
+    # return the nav list
+    return navList
 
 def features_nav():
+    # check if someone is logged in
     if _ui_user():
         return [
             {"label": "Friends", "href": url_for("ui.manage_friends")},
         ]
-    return [
-        {"label": "Calendars", "href": url_for("ui.view_calendars")},
-        {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
-        {"label": "Events", "href": url_for("ui.view_events")},
-    ]
+    else:
+        return [
+            {"label": "Calendars", "href": url_for("ui.view_calendars")},
+            {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
+            {"label": "Events", "href": url_for("ui.view_events")},
+        ]
+
+
 
 
 def user_nav():
@@ -187,7 +203,6 @@ def user_nav():
         {"label": "Remove Account", "href": url_for("ui.remove_account")},
     ]
 
-
 def admin_nav():
     return [
         {"label": "Dashboard", "href": url_for("ui.dashboard", role="admin")},
@@ -198,17 +213,10 @@ def admin_nav():
     ]
 
 
-# ---------------------------------------------------------------------------
-# Page renderer
-# ---------------------------------------------------------------------------
-
 def render_page(title, role, nav, template, **ctx):
     return render_template(template, title=title, role=role, nav=nav, **ctx)
 
 
-# ---------------------------------------------------------------------------
-# Blueprint context processor — injects globals into every template
-# ---------------------------------------------------------------------------
 
 from api.ui_routes import ui_bp  # noqa: E402 — imported here to avoid circular import
 

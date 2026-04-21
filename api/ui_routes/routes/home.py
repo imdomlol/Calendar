@@ -19,7 +19,7 @@ def home():
     user = _ui_user()
 
     if not user:
-        return render_page("Calendar Info System", "guest", guest_nav(), "home/guest.html")
+        return redirect(url_for("ui.login", next=request.path))
 
     userId = user.get("id")
     selected_calendar_id = (request.args.get("calendar_id") or "").strip()
