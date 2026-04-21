@@ -1,19 +1,21 @@
+# home and dashboard routes; the root route renders a month-preview calendar for logged-in users
 from flask import redirect, request, url_for
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
-    build_month_preview_data,
     _get_ui_supabase_client,
     _ui_user,
+    admin_nav,
+    build_month_preview_data,
     guest_nav,
     placeholder_calendars,
     placeholder_events,
     render_page,
     user_nav,
-    admin_nav,
 )
 
 
+# main landing route; shows a guest page if not logged in, or a month preview calendar if logged in
 @ui_bp.route("/")
 def home():
     user = _ui_user()
@@ -40,6 +42,7 @@ def home():
         calendars = calendars_result.data or []
 
         if calendars:
+            # fall back to the first calendar if the requested id is missing or invalid
             selected_calendar = next(
                 (c for c in calendars if str(c.get("id")) == selected_calendar_id),
                 calendars[0],
@@ -77,6 +80,7 @@ def brand_home():
     return redirect(url_for("ui.home"))
 
 
+# TODO: view_calendars and view_events are stubs not yet wired to real queries
 @ui_bp.route("/calendars")
 def view_calendars():
     return render_page("View Calendars", "guest", guest_nav(), "home/view_calendars.html",
@@ -89,6 +93,7 @@ def view_events():
                        events=placeholder_events)
 
 
+# role can be "user", "admin", or anything else; "user" and "admin" require login
 @ui_bp.route("/dashboard/<role>")
 def dashboard(role):
     if role in {"user", "admin"} and not _ui_user():

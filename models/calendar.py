@@ -18,6 +18,7 @@ class Calendar:
 '''
 
 from typing import Any
+
 from utils.supabase_client import get_supabase_client
 
 class InvalidUserID(Exception):                         # Custom Error raised for add_member()
@@ -47,8 +48,8 @@ class Calendar:
             "events": self.events,
             "age_timestamp": self.age_timestamp,
         }
-    
-    def save(self) -> Any: 
+
+    def save(self) -> Any:
         supabase = get_supabase_client()
         return (
             supabase                                    # Link to the supabase client.
@@ -57,7 +58,7 @@ class Calendar:
             .execute()                                  # Perform the actions, otherwise nothing occurs.
         )
 
-    def remove_calendar(self):
+    def remove_calendar(self) -> Any:
         supabase = get_supabase_client()
         return (
             supabase
