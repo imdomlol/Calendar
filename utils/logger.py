@@ -34,7 +34,7 @@ def logEvent(level, eventType, message, userId=None, path=None, method=None, sta
             print("WARNING: SUPABASE_SECRET_API_KEY not set, skipping log")
             return
         result = supabase.table("logs").insert(logRecord).execute()
-        # print(result) # uncomment to debug
+        # print(result)
     except Exception as err:
         # if supabase is down or something went wrong just print it
         # we dont want the logging to crash the actual request
