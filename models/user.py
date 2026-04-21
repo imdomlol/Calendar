@@ -47,11 +47,3 @@ class User:
         if notPresent:
             raise ValueError(f"User {user_id} is not in the friends list")
         self.friends.remove(user_id)
-
-
-    def __repr__(self) -> str:
-        return f"<User: {self.display_name}>"
-    
-    def get_friend_ids(self) -> list[str]:
-        """Returns a list of friend user IDs."""
-        return list(self.friends)
