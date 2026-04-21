@@ -41,6 +41,9 @@ body {
 .layout--sidebar-collapsed {
   grid-template-columns: 48px 1fr;
 }
+.layout--no-sidebar {
+  grid-template-columns: 1fr;
+}
 .sidebar {
   width: 240px;
   transition: width .2s ease;

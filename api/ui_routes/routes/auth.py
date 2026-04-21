@@ -50,7 +50,7 @@ def login():
                 error = _format_login_error(exc)
 
     return render_page("Log In", "guest", guest_nav(), "auth/login.html",
-                       error=error, info=info, next_path=nextPath)
+                       error=error, info=info, next_path=nextPath, hide_chrome=True)
 
 
 
@@ -94,7 +94,7 @@ def register():
                 error = f"Could not register: {exc}"
 
     return render_page("Register", "guest", guest_nav(), "auth/register.html",
-                       error=error, next_path=next_path)
+                       error=error, next_path=next_path, hide_chrome=True)
 
 @ui_bp.route("/logout")
 def logout():

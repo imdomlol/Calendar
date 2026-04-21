@@ -9,6 +9,7 @@
 <body>
   <div class="topbar">
     <div class="brand"><a href="{{ url_for('ui.brand_home') }}">Calendar System</a></div>
+    {% if not hide_chrome %}
     <div class="topbar-right">
       <a class="settings-btn" href="{{ url_for('ui.settings_page') }}" aria-label="Settings">&#9881;</a>
       <div class="top-links">
@@ -20,9 +21,11 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
   </div>
 
-  <div class="layout" id="layout">
+  <div class="layout{% if hide_chrome %} layout--no-sidebar{% endif %}" id="layout">
+    {% if not hide_chrome %}
     <aside class="sidebar" id="sidebar">
       <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">&#9776;</button>
       <div class="sidebar-nav">
@@ -31,6 +34,7 @@
       {% endfor %}
       </div>
     </aside>
+    {% endif %}
 
     <main class="content">
       {% block content %}{% endblock %}
