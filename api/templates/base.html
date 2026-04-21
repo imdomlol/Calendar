@@ -10,6 +10,11 @@
   <div class="topbar">
     <div class="brand"><a href="{{ url_for('ui.brand_home') }}">Calendar System</a></div>
     {% if not hide_chrome %}
+    <div class="topbar-center">
+      {% for item in features_nav %}
+      <a href="{{ item.href }}">{{ item.label }}</a>
+      {% endfor %}
+    </div>
     <div class="topbar-right">
       <a class="settings-btn" href="{{ url_for('ui.settings_page') }}" aria-label="Settings">&#9881;</a>
       <div class="top-links">
@@ -24,18 +29,7 @@
     {% endif %}
   </div>
 
-  <div class="layout{% if hide_chrome %} layout--no-sidebar{% endif %}" id="layout">
-    {% if not hide_chrome %}
-    <aside class="sidebar" id="sidebar">
-      <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">&#9776;</button>
-      <div class="sidebar-nav">
-      {% for item in features_nav %}
-        <a href="{{ item.href }}">{{ item.label }}</a>
-      {% endfor %}
-      </div>
-    </aside>
-    {% endif %}
-
+  <div class="layout" id="layout">
     <main class="content">
       {% block content %}{% endblock %}
     </main>
@@ -48,25 +42,5 @@
     {% if build_info.date %}&nbsp;&middot;&nbsp;{{ build_info.date }}{% endif %}
   </footer>
   {% endif %}
-
-  <script>
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const layout = document.getElementById('layout');
-      const collapsed = sidebar.classList.toggle('sidebar--collapsed');
-      layout.classList.toggle('layout--sidebar-collapsed', collapsed);
-      try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch(e) {}
-    }
-    (function() {
-      try {
-        if (localStorage.getItem('sidebarCollapsed') === '1') {
-          const sidebar = document.getElementById('sidebar');
-          const layout = document.getElementById('layout');
-          if (sidebar) sidebar.classList.add('sidebar--collapsed');
-          if (layout) layout.classList.add('layout--sidebar-collapsed');
-        }
-      } catch(e) {}
-    })();
-  </script>
 </body>
 </html>

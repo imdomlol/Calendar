@@ -23,6 +23,23 @@ body {
   color: inherit;
   text-decoration: none;
 }
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.topbar-center a {
+  color: white;
+  text-decoration: none;
+  font-size: 14px;
+  background: rgba(255,255,255,0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: inline-block;
+}
+.topbar-center a:hover {
+  background: rgba(255,255,255,0.28);
+}
 .top-links a {
   color: white;
   text-decoration: none;
@@ -34,69 +51,7 @@ body {
   display: inline-block;
 }
 .layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
   min-height: calc(100vh - 80px);
-}
-.layout--sidebar-collapsed {
-  grid-template-columns: 48px 1fr;
-}
-.layout--no-sidebar {
-  grid-template-columns: 1fr;
-}
-.sidebar {
-  width: 240px;
-  transition: width .2s ease;
-  overflow: hidden;
-  white-space: nowrap;
-  background: #ffffff;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-}
-.sidebar--collapsed {
-  width: 48px;
-}
-.sidebar h3 {
-  margin-top: 0;
-  font-size: 18px;
-}
-.sidebar-toggle {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 14px 0;
-  background: none;
-  border: none;
-  border-bottom: 1px solid #e5e7eb;
-  cursor: pointer;
-  font-size: 18px;
-  color: #1f2937;
-}
-.sidebar-toggle:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-.sidebar-nav {
-  padding: 12px;
-  flex: 1;
-}
-.sidebar--collapsed .sidebar-nav {
-  display: none;
-}
-.sidebar a {
-  display: block;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  text-decoration: none;
-  color: #1f2937;
-  border-radius: 8px;
-}
-.sidebar a:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
 }
 .topbar-right {
   display: flex;
@@ -212,10 +167,7 @@ th { background: #eff6ff; }
   border-radius: 4px;
 }
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
-  .layout--sidebar-collapsed { grid-template-columns: 1fr; }
-  .sidebar { width: auto; border-right: 0; border-bottom: 1px solid #e5e7eb; }
-  .sidebar--collapsed { width: auto; display: none; }
   .content { padding: 18px; }
   .top-links a { margin-left: 6px; margin-top: 6px; }
+  .topbar-center { flex-wrap: wrap; }
 }
