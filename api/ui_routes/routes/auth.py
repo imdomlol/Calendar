@@ -7,10 +7,11 @@ from api.ui_routes.helpers import (
     _resolve_app_base_url,
 )
 from utils.supabase_client import get_supabase_client
+from utils.logger import logEvent
 
 
 @ui_bp.route("/login", methods=["GET", "POST"])
-def calauth_login():
+def login():
     # if something goes wrong we put the message here
     error = ""
     # get the info message from the url if there is one
@@ -53,6 +54,7 @@ def calauth_login():
                 # if uid is None the login didnt work
                 has_uid = uid is not None
                 if has_uid == False:
+                    logEvent("WARNING", "auth", "login failed - no uid returned", details="email: " + email)
                     error = "Wrong email or password"
                 else:
                     # save the user info to the flask session
@@ -62,9 +64,11 @@ def calauth_login():
                         "email": getattr(user_obj, "email", email),
                         "access_token": access_tok,
                     }
+                    logEvent("INFO", "auth", "login successful", userId=uid, details="email: " + email)
                     # send them to wherever they were trying to go
                     return redirect(nextPath)
             except Exception as e:
+                logEvent("WARNING", "auth", "login failed - exception", details="email: " + email + " error: " + str(e))
                 error = _format_login_error(e)
 
     # render the login page and pass along any error or info messages
@@ -76,7 +80,7 @@ def calauth_login():
 
 
 @ui_bp.route("/register", methods=["GET", "POST"])
-def calauth_register():
+def register():
     # no error yet
     error = None
     # get the next path from the url or default to dashboard
@@ -115,6 +119,7 @@ def calauth_register():
                 calDb.auth.sign_up(
                     {"email": email, "password": password, "options": options}
                 )
+                logEvent("INFO", "auth", "user registered", details="email: " + email)
                 # registration worked so send them to login with a message
                 return redirect(url_for(
                     "ui.login",
@@ -125,6 +130,7 @@ def calauth_register():
                     ),
                 ))
             except Exception as err:
+                logEvent("ERROR", "auth", "registration failed", details="email: " + email + " error: " + str(err))
                 error = f"signup failed for {email}: {err}"
 
     # show the register page
@@ -134,7 +140,7 @@ def calauth_register():
     )
 
 @ui_bp.route("/logout")
-def calauth_logout():
+def logout():
     # remove the user from the session
     # session.pop does nothing if the key isnt there
     session.pop("ui_user", None)

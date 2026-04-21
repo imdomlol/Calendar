@@ -2,6 +2,7 @@ from flask import Blueprint, request
 import os
 
 from utils.supabase_client import get_supabase_client
+from utils.logger import logEvent
 
 auth_bp = Blueprint("auth", __name__)
 supabase = get_supabase_client()
@@ -47,6 +48,7 @@ def register():
 
         # call supabase to create the account
         result = supabase.auth.sign_up(payload)
+        logEvent("INFO", "auth", "user registered", details="email: " + email)
 
         # return the new user and session info
         # 201 means something was created
@@ -57,6 +59,7 @@ def register():
         }, 201
 
     except Exception as e:
+        logEvent("ERROR", "auth", "registration failed", details="email: " + str(email) + " error: " + str(e))
         return {"error": str(e)}, 500
 
 
@@ -75,10 +78,13 @@ def login():
         res = supabase.auth.sign_in_with_password(
             {"email": email, "password": pw}
         )
+        userId = getattr(res.user, "id", None)
+        logEvent("INFO", "auth", "login successful", userId=userId, details="email: " + email)
         return {
             "message": "Login successful",
             "session": res.session,
             "user": res.user,
         }, 200
     except Exception:
+        logEvent("WARNING", "auth", "login failed - bad credentials", details="email: " + str(email))
         return {"error": "Invalid credentials"}, 401
