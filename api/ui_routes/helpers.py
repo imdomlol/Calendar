@@ -1,6 +1,6 @@
 import os
 import subprocess
-from flask import redirect, render_template, request, session, url_for
+from flask import abort, redirect, render_template, request, session, url_for
 from functools import wraps
 from utils.supabase_client import get_supabase_client
 from datetime import date, datetime
@@ -99,6 +99,28 @@ def ui_login_required(view_func):
         # user is logged in so call the actual function
         return view_func(*args, **kwargs)
     return wrapped
+
+def ui_admin_required(view_func):
+    # this decorator works just like ui_login_required
+    # but it also checks if the user is an admin
+    # if they are not admin we send back a 403 forbidden error
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        # first check if they are logged in at all
+        usr = _ui_user()
+        if not usr:
+            # not logged in, send them to the login page
+            return redirect(url_for("ui.login", next=request.path))
+        # they are logged in, now check if they are an admin
+        # we stored the role in the session when they logged in
+        if usr.get("role") != "admin":
+            # they are logged in but not an admin
+            # 403 means "you dont have permission to see this"
+            abort(403)
+        # they are logged in and they are an admin, let them through
+        return view_func(*args, **kwargs)
+    return wrapped
+
 
 def _format_login_error(exception):
     # pull the message and code out of the exception

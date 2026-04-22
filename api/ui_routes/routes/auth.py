@@ -57,12 +57,24 @@ def login():
                     logEvent("WARNING", "auth", "login failed - no uid returned", details="email: " + email)
                     error = "Wrong email or password"
                 else:
+                    # read the app_metadata from the user object supabase gave us back
+                    # app_metadata is a dict that only admins can write to
+                    # so if role is "admin" in here, we know it was set by an admin
+                    app_meta = getattr(user_obj, "app_metadata", None)
+                    # if app_meta is None (not set at all) use an empty dict so we dont crash
+                    if app_meta is None:
+                        app_meta = {}
+                    # get the role from app_meta, if its not there just use "user" as the default
+                    role = app_meta.get("role", "user")
+
                     # save the user info to the flask session
                     # this is how we remember who is logged in between requests
+                    # we now also save the role so we can check it on every page
                     session["ui_user"] = {
                         "id": uid,
                         "email": getattr(user_obj, "email", email),
                         "access_token": access_tok,
+                        "role": role,
                     }
                     logEvent("INFO", "auth", "login successful", userId=uid, details="email: " + email)
                     # send them to wherever they were trying to go

@@ -3,12 +3,41 @@
 {% block content %}
 <div class="hero">
   <h1>System Logs</h1>
-  <p class="muted">Admin-only activity log view.</p>
+  <p class="muted">Showing the 5 most recent log entries, newest first.</p>
 </div>
+
+{% if logs %}
 <table>
-  <tr><th>#</th><th>Log Entry</th></tr>
-  {% for line in logs %}
-    <tr><td>{{ loop.index }}</td><td>{{ line }}</td></tr>
+  <tr>
+    <th>Time</th>
+    <th>Level</th>
+    <th>Event Type</th>
+    <th>Message</th>
+    <th>Details</th>
+  </tr>
+  {% for log in logs %}
+  <tr>
+    {# created_at looks like "2026-04-21T10:30:00.000Z", we cut it to first 19 chars to get "2026-04-21T10:30:00" #}
+    <td class="cell-mono">{{ log.created_at[:19] if log.created_at else "—" }}</td>
+    <td>
+      {% if log.level == "ERROR" %}
+        <span class="pill" style="background:#fee2e2;color:#dc2626;">ERROR</span>
+      {% elif log.level == "WARNING" %}
+        <span class="pill" style="background:#fef3c7;color:#92400e;">WARN</span>
+      {% else %}
+        <span class="pill">{{ log.level or "—" }}</span>
+      {% endif %}
+    </td>
+    <td>{{ log.event_type or "—" }}</td>
+    <td>{{ log.message or "—" }}</td>
+    <td class="muted cell-mono">{{ log.details or "" }}</td>
+  </tr>
   {% endfor %}
 </table>
+{% else %}
+{# this shows when the logs list is empty (either no logs exist or supabase was unavailable) #}
+<div class="empty">
+  <p class="muted">No log entries found, or the logging service is unavailable.</p>
+</div>
+{% endif %}
 {% endblock %}
