@@ -238,6 +238,8 @@ def features_nav():
     # we show different nav items depending on whether they are logged in or not
     if _ui_user():
         return [
+            {"label": "Calendars", "href": url_for("ui.manage_calendars")},
+            {"label": "Events", "href": url_for("ui.manage_events")},
             {"label": "Friends", "href": url_for("ui.manage_friends")},
         ]
     else:
