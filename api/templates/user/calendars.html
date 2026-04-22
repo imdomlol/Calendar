@@ -23,7 +23,7 @@
 
 <div class="grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0; justify-items: center; align-items: stretch;">
   <!-- Empty calendar card for creation -->
-  <div class="card empty-calendar-card" style="opacity:0.95; border-style: dashed; border-color: #cbd5e1; min-width: 320px; max-width: 340px; width: 100%; height: 320px; margin: 0; position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; background: #f7faff;">
+   <div class="card empty-calendar-card" style="opacity:1; border-style: dashed; border-color: #cbd5e1; min-width: 340px; max-width: 340px; width: 100%; height: 320px; margin: 0; position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; background: #f0f4fa;">
     <!-- Tab navigation -->
     <div style="margin-bottom:10px; margin-top: 8px;">
       <div class="tab-nav" style="display:flex; gap:8px;">
@@ -48,7 +48,7 @@
     </div>
     <!-- Tab content: Guest Link -->
     <div class="tab-content" id="guest-new" style="display:none;">
-      <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb; color: #bdbdbd; font-size:13px;">
+          <div class="card" style="background: #e9eef5; min-width: 340px; max-width: 340px; width: 100%; height: 320px; margin: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start;">
         <em>Guest link options will be available after creation.</em>
       </div>
     </div>
@@ -95,24 +95,37 @@
         </div>
 
         <!-- Tab content -->
-        <div class="tab-content" id="info-{{ cal.id }}">
-          <p class="muted" style="font-size:13px;">{{ (cal.events or [])|length }} event(s) linked</p>
-        </div>
-        <div class="tab-content" id="guest-{{ cal.id }}" style="display:none;">
-          <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
-            <p style="margin-bottom:6px;"><strong>Guest Link</strong></p>
-            {% if cal.guest_link_active and cal.guest_link_token %}
-              <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
-                {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
-              </p>
-              <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
-            {% else %}
+           <div class="tab-content" id="info-new">
+             <form id="new-calendar-form" method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 12px; height: 210px; justify-content: flex-start;">
+               <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+               <input type="text" name="name" placeholder="Calendar Title" required style="padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px; margin-top: 8px;" />
+               <div style="color:#bdbdbd; font-size:13px; margin-bottom:16px;">
+                 <em>Details will appear here after creation.</em>
+               </div>
+               <button type="submit" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #1d4ed8; color: white;">
+                 +
+               </button>
+             </form>
               <p class="muted" style="font-size:13px;">No active guest link.</p>
             {% endif %}
 
-            <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
-                  style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
-              <select id="role-{{ cal.id }}" name="role"
+             <form id="new-calendar-form-guest" method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 10px; height: 210px; justify-content: flex-start;">
+               <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+               <label style="font-size:13px; color:#4b5563; margin-top: 8px;">
+                 <input type="checkbox" name="guest_link_active" value="true" style="margin-right: 8px;" checked>
+                 Generate guest link on creation
+               </label>
+               <select name="guest_link_role" style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; width: 100%;">
+                 <option value="viewer">Viewer</option>
+                 <option value="editor">Editor</option>
+               </select>
+               <div style="color:#bdbdbd; font-size:13px; margin-top:8px;">
+                 <em>Guest link will be created if checked.</em>
+               </div>
+               <button type="submit" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #1d4ed8; color: white;">
+                 +
+               </button>
+             </form>
                       style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
                 <option value="viewer">Viewer</option>
                 <option value="editor">Editor</option>
