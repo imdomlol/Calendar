@@ -95,52 +95,34 @@
         </div>
 
         <!-- Tab content -->
-           <div class="tab-content" id="info-new">
-             <form id="new-calendar-form" method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 12px; height: 210px; justify-content: flex-start;">
-               <input type="hidden" name="owner_id" value="{{ owner_id }}" />
-               <input type="text" name="name" placeholder="Calendar Title" required style="padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px; margin-top: 8px;" />
-               <div style="color:#bdbdbd; font-size:13px; margin-bottom:16px;">
-                 <em>Details will appear here after creation.</em>
-               </div>
-               <button type="submit" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #1d4ed8; color: white;">
-                 +
-               </button>
-             </form>
-              <p class="muted" style="font-size:13px;">No active guest link.</p>
-            {% endif %}
-
-             <form id="new-calendar-form-guest" method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 10px; height: 210px; justify-content: flex-start;">
-               <input type="hidden" name="owner_id" value="{{ owner_id }}" />
-               <label style="font-size:13px; color:#4b5563; margin-top: 8px;">
-                 <input type="checkbox" name="guest_link_active" value="true" style="margin-right: 8px;" checked>
-                 Generate guest link on creation
-               </label>
-               <select name="guest_link_role" style="padding:8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; width: 100%;">
-                 <option value="viewer">Viewer</option>
-                 <option value="editor">Editor</option>
-               </select>
-               <div style="color:#bdbdbd; font-size:13px; margin-top:8px;">
-                 <em>Guest link will be created if checked.</em>
-               </div>
-               <button type="submit" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; background: #1d4ed8; color: white;">
-                 +
-               </button>
-             </form>
-                      style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
-                <option value="viewer">Viewer</option>
-                <option value="editor">Editor</option>
-              </select>
-              <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
-                {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
-              </button>
+        <div class="tab-content" id="info-{{ cal.id }}">
+          <p class="muted" style="font-size:13px;">{{ (cal.events or [])|length }} event(s) linked</p>
+          <p class="muted" style="font-size:12px;">ID: {{ cal.id }}</p>
+        </div>
+        <div class="tab-content" id="guest-{{ cal.id }}" style="display:none;">
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
+              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
+            </p>
+            <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
+          {% else %}
+            <p class="muted" style="font-size:13px;">No active guest link.</p>
+          {% endif %}
+          <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
+                style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+            <select name="role" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </select>
+            <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
+              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
+            </button>
+          </form>
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:6px;">
+              <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
             </form>
-
-            {% if cal.guest_link_active and cal.guest_link_token %}
-              <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:6px;">
-                <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
-              </form>
-            {% endif %}
-          </div>
+          {% endif %}
         </div>
         <div class="tab-content" id="members-{{ cal.id }}" style="display:none;">
           {% if cal.member_ids and cal.member_ids|length > 0 %}
