@@ -76,15 +76,7 @@
         }
 
         if (btn && dropdown && menu) {
-          btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (menu.classList.contains('user-menu--open')) {
-              closeMenu();
-            } else {
-              openMenu();
-            }
-          });
-          // Keep open on hover
+          // Only hover events, no click handler
           btn.addEventListener('mouseenter', function() {
             openMenu();
             cancelClose();

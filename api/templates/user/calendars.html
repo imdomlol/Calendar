@@ -136,11 +136,17 @@ function showTab(btn, tabId) {
   btn.style.color = '#1d4ed8';
 }
 // Set default tab for all cards on page load
-window.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.card').forEach(function(card) {
-    var firstTabBtn = card.querySelector('.tab-btn');
-    if (firstTabBtn) firstTabBtn.click();
-  });
-});
-</script>
-{% endblock %}
+    <div class="card empty-calendar-card" style="opacity:0.95; border-style: dashed; border-color: #cbd5e1; max-width: 400px; margin: 0 auto 24px auto; position: relative;">
+      <div class="pill" style="margin-bottom:10px;">New Calendar</div>
+      <form method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 12px;">
+        <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+        <input type="text" name="name" placeholder="Calendar Title" required style="padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px;" />
+        <div style="color:#bdbdbd; font-size:13px; margin-bottom:32px;">
+          <em>Details will appear here after creation.</em>
+        </div>
+        <button type="submit" class="btn" style="position: absolute; bottom: 18px; right: 18px; border:none; cursor:pointer; margin-top:0; padding: 10px 16px; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: #1d4ed8; color: white;">
+          +
+        </button>
+      </form>
+    </div>
+    
