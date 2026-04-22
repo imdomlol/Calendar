@@ -2,23 +2,15 @@
 {% from "macros/ui.html" import status_banner %}
 
 {% block content %}
+
 <div class="hero">
   <h1>Manage Calendars</h1>
-  <p class="muted">Create calendars in Supabase. Owner id is auto-filled from your login.</p>
+  <p class="muted">Create, remove, or adjust guest settings about your calendars.</p>
 </div>
 
 {{ status_banner(status, message) }}
 
-<div class="card" style="margin-bottom:16px;">
-  <h4>Create a Calendar</h4>
-  <form method="POST" action="{{ url_for('ui.create_calendar') }}"
-        style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-    <input type="hidden" name="owner_id" value="{{ owner_id }}" />
-    <input type="text" name="name" placeholder="Calendar name (required)" required
-           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
-    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Create Calendar</button>
-  </form>
-</div>
+
 
 {% if not has_guest_link_fields %}
   <div class="card banner banner-error">
@@ -28,8 +20,24 @@
   </div>
 {% endif %}
 
-{% if calendars %}
-  <div class="grid">
+
+<div class="grid">
+  <!-- Empty calendar card for creation -->
+  <div class="card" style="opacity:0.7; border-style: dashed; border-color: #cbd5e1;">
+    <div class="pill" style="margin-bottom:6px;">New Calendar</div>
+    <h4 style="margin:0; color:#9ca3af;">(No name)</h4>
+    <p class="muted" style="font-size:13px;">No events linked</p>
+    <form method="POST" action="{{ url_for('ui.create_calendar') }}" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="hidden" name="owner_id" value="{{ owner_id }}" />
+      <input type="text" name="name" placeholder="Calendar name (required)" required style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:120px;" />
+      <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Create Calendar</button>
+    </form>
+    <div style="margin-top:18px; color:#bdbdbd; font-size:13px;">
+      <em>Details will appear here after creation.</em>
+    </div>
+  </div>
+
+  {% if calendars %}
     {% for cal in calendars %}
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
@@ -43,53 +51,92 @@
           </form>
         </div>
 
-        <p class="muted" style="font-size:13px;">{{ (cal.events or [])|length }} event(s) linked</p>
-
-        <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
-          <p style="margin-bottom:6px;"><strong>Guest Link</strong></p>
-          {% if cal.guest_link_active and cal.guest_link_token %}
-            <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
-              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
-            </p>
-            <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
-          {% else %}
-            <p class="muted" style="font-size:13px;">No active guest link.</p>
-          {% endif %}
-
-          <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
-                style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
-            <select id="role-{{ cal.id }}" name="role"
-                    style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
-            </select>
-            <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
-              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
-            </button>
-          </form>
-
-          {% if cal.guest_link_active and cal.guest_link_token %}
-            <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:6px;">
-              <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
-            </form>
-          {% endif %}
+        <!-- Tab navigation -->
+        <div style="margin-bottom:10px;">
+          <div class="tab-nav" style="display:flex; gap:8px;">
+            <button class="tab-btn" onclick="showTab(this, 'info-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#eff6ff; color:#1d4ed8; cursor:pointer;">Info</button>
+            <button class="tab-btn" onclick="showTab(this, 'guest-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Guest Link</button>
+            <button class="tab-btn" onclick="showTab(this, 'members-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Members</button>
+          </div>
         </div>
 
-        {% if cal.member_ids and cal.member_ids|length > 0 %}
-          <p style="font-size:13px; margin-bottom:4px;"><strong>Members</strong></p>
-          <ul style="margin:0; padding-left:18px;">
-            {% for m in cal.member_ids %}
-              <li style="font-size:12px; color:#6b7280;">{{ m }}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
+        <!-- Tab content -->
+        <div class="tab-content" id="info-{{ cal.id }}">
+          <p class="muted" style="font-size:13px;">{{ (cal.events or [])|length }} event(s) linked</p>
+        </div>
+        <div class="tab-content" id="guest-{{ cal.id }}" style="display:none;">
+          <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+            <p style="margin-bottom:6px;"><strong>Guest Link</strong></p>
+            {% if cal.guest_link_active and cal.guest_link_token %}
+              <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
+                {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
+              </p>
+              <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
+            {% else %}
+              <p class="muted" style="font-size:13px;">No active guest link.</p>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
+                  style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+              <select id="role-{{ cal.id }}" name="role"
+                      style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+              </select>
+              <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
+                {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
+              </button>
+            </form>
+
+            {% if cal.guest_link_active and cal.guest_link_token %}
+              <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:6px;">
+                <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+        <div class="tab-content" id="members-{{ cal.id }}" style="display:none;">
+          {% if cal.member_ids and cal.member_ids|length > 0 %}
+            <p style="font-size:13px; margin-bottom:4px;"><strong>Members</strong></p>
+            <ul style="margin:0; padding-left:18px;">
+              {% for m in cal.member_ids %}
+                <li style="font-size:12px; color:#6b7280;">{{ m }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted" style="font-size:13px;">No members yet.</p>
+          {% endif %}
+        </div>
       </div>
     {% endfor %}
-  </div>
-{% else %}
-  <div class="empty">
-    <h3>No calendars found</h3>
-    <p>No calendar rows exist for this owner id yet.</p>
-  </div>
-{% endif %}
+  {% endif %}
+</div>
+
+<script>
+function showTab(btn, tabId) {
+  // Hide all tab contents in this card
+  var card = btn.closest('.card');
+  var tabs = card.querySelectorAll('.tab-content');
+  tabs.forEach(function(tab) { tab.style.display = 'none'; });
+  // Remove active style from all tab buttons
+  var tabBtns = card.querySelectorAll('.tab-btn');
+  tabBtns.forEach(function(b) {
+    b.style.background = '#f3f4f6';
+    b.style.color = '#4b5563';
+  });
+  // Show selected tab
+  var activeTab = card.querySelector('#' + tabId);
+  if (activeTab) activeTab.style.display = '';
+  // Style active button
+  btn.style.background = '#eff6ff';
+  btn.style.color = '#1d4ed8';
+}
+// Set default tab for all cards on page load
+window.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.card').forEach(function(card) {
+    var firstTabBtn = card.querySelector('.tab-btn');
+    if (firstTabBtn) firstTabBtn.click();
+  });
+});
+</script>
 {% endblock %}
