@@ -1,22 +1,10 @@
 import os
-import sys
-from importlib import import_module
+from supabase import create_client
 
 
 def get_supabase_client():
-    try:
-        create_client = import_module("supabase").create_client
-    except ModuleNotFoundError as exception:
-        raise RuntimeError(
-            "Missing package 'supabase' for interpreter "
-            f"{sys.executable}. Use '.venv/bin/python -m pip install supabase' "
-            "and run scripts with '.venv/bin/python ...'."
-        ) from exception
-
+    # get the url and key from environment variables
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
-
-    if not supabase_url or not supabase_key:
-        raise RuntimeError("Missing required environment variables.")
-
+    # create the client and return it
     return create_client(supabase_url, supabase_key)

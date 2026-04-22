@@ -71,6 +71,12 @@
           {% endif %}
         </div>
 
+        <form method="POST" action="{{ url_for('ui.delete_calendar', calendar_id=cal.id) }}"
+              style="margin-top:12px;"
+              onsubmit="return confirm('Delete this calendar? This cannot be undone.');">
+          <button type="submit" class="btn danger" style="border:none; cursor:pointer; margin-top:0;">Delete Calendar</button>
+        </form>
+
         <ul>
           {% if cal.member_ids %}
             {% for m in cal.member_ids %}

@@ -415,6 +415,61 @@ def create_event():
 
 
 
+@ui_bp.route("/user/calendars/<calendar_id>/delete", methods=["POST"])
+@ui_login_required
+def delete_calendar(calendar_id):
+    # first get the logged in users id
+    # we need it to check they own the calendar before deleting
+    uid = _ui_user()["id"]
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # check that this calendar actually belongs to the user
+        # we can't just trust the calendar_id from the url
+        # someone could put any id in there and try to delete someone elses calendar
+        ownerCheck = (
+            calDb.table("calendars")
+            .select("id")
+            .eq("id", calendar_id)
+            .eq("owner_id", uid)
+            .execute()
+        )
+
+        # if the data list is empty that means no matching calendar was found for this owner
+        # so we stop here and show an error
+        if len(ownerCheck.data) == 0:
+            return redirect(
+                url_for(
+                    "ui.manage_calendars",
+                    status="error",
+                    message=f"Calendar {calendar_id} not owned by uid {uid}",
+                )
+            )
+
+        # ok the user owns it so we can delete it now
+        # we still add the owner_id check to the delete just to be safe
+        calDb.table("calendars").delete().eq("id", calendar_id).eq("owner_id", uid).execute()
+
+        # redirect back to the calendars page with a success message
+        return redirect(
+            url_for(
+                "ui.manage_calendars",
+                status="ok",
+                message=f"Calendar {calendar_id} deleted.",
+            )
+        )
+    except Exception as err:
+        # something went wrong with supabase so show the error
+        return redirect(
+            url_for(
+                "ui.manage_calendars",
+                status="error",
+                message=f"delete calendar failed for calendar {calendar_id}: {err}",
+            )
+        )
+
+
 @ui_bp.route("/user/friends")
 @ui_login_required
 def manage_friends():

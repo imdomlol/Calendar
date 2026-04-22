@@ -25,6 +25,8 @@ supabase = supabaseClient
 calApp.register_blueprint(auth_bp, url_prefix="/api/auth")
 calApp.register_blueprint(ui_bp, url_prefix="/ui")
 _featureFlag = False
+# vercel needs a variable called app
+# this just points to calApp so vercel can pick it up
 app = calApp
 
 
