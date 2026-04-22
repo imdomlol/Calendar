@@ -1,23 +1,47 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
 
 {% block content %}
 <div class="hero">
-  <h1>Manage Friends</h1>
-  <p class="muted">Add and remove friends.</p>
+  <h1>Friends</h1>
+  <p class="muted">Add friends by email to share calendars with them.</p>
 </div>
+
+{{ status_banner(status, message) }}
+
 <div class="grid">
   <div class="card">
-    <h4>Friends List</h4>
-    <ul>
-      {% for name in friends %}
-        <li>{{ name }}</li>
-      {% endfor %}
-    </ul>
+    <h4>Add Friend</h4>
+    <form method="POST" action="{{ url_for('ui.add_friend') }}"
+          style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <input type="email" name="email" placeholder="Friend's email address" required
+             style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
+      <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Add</button>
+    </form>
   </div>
+
   <div class="card">
-    <h4>Actions</h4>
-    <p>Add Friend</p>
-    <p>Remove Friend</p>
+    <h4>Friends List</h4>
+    {% if friends %}
+      <ul style="list-style:none; padding:0; margin:0;">
+        {% for f in friends %}
+          <li style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f3f4f6;">
+            <div>
+              <span style="font-size:14px;">{{ f.display_name or f.email }}</span>
+              {% if f.display_name %}
+                <span class="muted" style="font-size:12px; margin-left:6px;">{{ f.email }}</span>
+              {% endif %}
+            </div>
+            <form method="POST" action="{{ url_for('ui.remove_friend') }}" style="margin:0;">
+              <input type="hidden" name="friend_id" value="{{ f.id }}" />
+              <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Remove</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted" style="font-size:14px;">No friends added yet.</p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

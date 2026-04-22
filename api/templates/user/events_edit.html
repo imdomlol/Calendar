@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Edit Event</h1>
+  <p class="muted">Update the details for this event.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="max-width:560px;">
+  <form method="POST" action="{{ url_for('ui.edit_event', event_id=event.id) }}"
+        style="display:flex; flex-direction:column; gap:12px;">
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Title</label>
+      <input type="text" name="title" value="{{ event.title or '' }}" required
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Description</label>
+      <input type="text" name="description" value="{{ event.description or '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Start</label>
+      <input type="datetime-local" name="start_timestamp"
+             value="{{ event.start_timestamp[:16] if event.start_timestamp else '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">End</label>
+      <input type="datetime-local" name="end_timestamp"
+             value="{{ event.end_timestamp[:16] if event.end_timestamp else '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:4px;">
+      <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Save Changes</button>
+      <a href="{{ url_for('ui.manage_events') }}" class="btn" style="background:#6b7280; margin-top:0;">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -55,17 +55,27 @@
 <div class="card">
   <h4>Events in selected calendar</h4>
   <table>
-    <tr><th>Title</th><th>Start</th><th>End</th></tr>
+    <tr><th>Title</th><th>Start</th><th>End</th><th>Actions</th></tr>
     {% if events %}
       {% for event in events %}
         <tr>
           <td>{{ event.title or "Untitled" }}</td>
           <td>{{ event.start_timestamp or "" }}</td>
           <td>{{ event.end_timestamp or "" }}</td>
+          <td style="display:flex; gap:6px; align-items:center;">
+            <a href="{{ url_for('ui.edit_event', event_id=event.id) }}"
+               class="btn btn-sm" style="margin-top:0;">Edit</a>
+            <form method="POST" action="{{ url_for('ui.delete_event', event_id=event.id) }}"
+                  onsubmit="return confirm('Delete this event? This cannot be undone.');"
+                  style="margin:0;">
+              <input type="hidden" name="calendar_id" value="{{ selected_calendar_id }}" />
+              <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Delete</button>
+            </form>
+          </td>
         </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="3" class="muted">No events found for this calendar.</td></tr>
+      <tr><td colspan="4" class="muted">No events found for this calendar.</td></tr>
     {% endif %}
   </table>
 </div>

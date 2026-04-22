@@ -50,20 +50,59 @@
   {% endif %}
 
   <script>
-    function toggleUserMenu() {
-      var menu = document.getElementById('userMenu');
-      var btn = document.getElementById('userMenuBtn');
-      var open = menu.classList.toggle('user-menu--open');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    }
-    document.addEventListener('click', function(e) {
-      var menu = document.getElementById('userMenu');
-      if (menu && !menu.contains(e.target)) {
-        menu.classList.remove('user-menu--open');
+      // Improved user menu logic: stays open on hover, closes with delay
+      (function() {
+        var menu = document.getElementById('userMenu');
         var btn = document.getElementById('userMenuBtn');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
-    });
+        var dropdown = document.getElementById('userMenuDropdown');
+        var closeTimeout = null;
+
+        function openMenu() {
+          menu.classList.add('user-menu--open');
+          if (btn) btn.setAttribute('aria-expanded', 'true');
+        }
+        function closeMenu() {
+          menu.classList.remove('user-menu--open');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+        function delayedClose() {
+          closeTimeout = setTimeout(closeMenu, 200); // 200ms delay
+        }
+        function cancelClose() {
+          if (closeTimeout) {
+            clearTimeout(closeTimeout);
+            closeTimeout = null;
+          }
+        }
+
+        if (btn && dropdown && menu) {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (menu.classList.contains('user-menu--open')) {
+              closeMenu();
+            } else {
+              openMenu();
+            }
+          });
+          // Keep open on hover
+          btn.addEventListener('mouseenter', function() {
+            openMenu();
+            cancelClose();
+          });
+          btn.addEventListener('mouseleave', delayedClose);
+          dropdown.addEventListener('mouseenter', function() {
+            openMenu();
+            cancelClose();
+          });
+          dropdown.addEventListener('mouseleave', delayedClose);
+          // Close on click outside
+          document.addEventListener('click', function(e) {
+            if (!menu.contains(e.target)) {
+              closeMenu();
+            }
+          });
+        }
+      })();
   </script>
 </body>
 </html>

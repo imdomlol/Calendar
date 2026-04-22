@@ -34,15 +34,40 @@ def home():
 
     try:
         calDb = _get_ui_supabase_client()
-        # get all calendars owned by this user
-        calendars_result = (
+
+        # get calendars the user owns
+        owned_result = (
             calDb.table("calendars")
             .select("id, name, owner_id")
             .eq("owner_id", userId)
             .order("age_timestamp", desc=False)
             .execute()
         )
-        calendars = calendars_result.data or []
+        ownedCals = owned_result.data or []
+
+        # also get calendars where the user is listed as a member
+        # member_ids is an array column so we use overlaps to check if userId is in it
+        member_result = (
+            calDb.table("calendars")
+            .select("id, name, owner_id")
+            .overlaps("member_ids", [userId])
+            .order("age_timestamp", desc=False)
+            .execute()
+        )
+        memberCals = member_result.data or []
+
+        # combine the two lists but dont add duplicates
+        # owned calendars are already in member_ids (they get added on create)
+        # so we track which ids we already have
+        calendars = []
+        addedIds = []
+        for c in ownedCals:
+            addedIds.append(c["id"])
+            calendars.append(c)
+        for c in memberCals:
+            if c["id"] not in addedIds:
+                addedIds.append(c["id"])
+                calendars.append(c)
 
         if calendars:
             # loop through calendars to find the selected one

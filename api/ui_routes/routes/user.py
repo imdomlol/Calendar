@@ -6,26 +6,46 @@ from api.ui_routes.helpers import (
     ui_login_required,
     user_nav,
 )
-from api.ui_routes.helpers import _resolve_app_base_url, _ui_user, placeholder_externals, placeholder_friends
+from api.ui_routes.helpers import _resolve_app_base_url, _ui_user
 import secrets
 
 
 @ui_bp.route("/user/externals")
 @ui_login_required
 def manage_externals():
-    # this route shows the manage externals page
-    # it is for managing external calendar connections
-    # first we get the providers list
-    # placeholder_externals is just test data for now
-    provs = placeholder_externals
-    # now we render the page
-    # we pass provs as the providers keyword arg
+    # get the user id from the session
+    uid = _ui_user()["id"]
+    status = (request.args.get("status") or "").strip()
+    message = (request.args.get("message") or "").strip()
+
+    # this will hold the list of connected providers from the database
+    providersList = []
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # load all external connections for this user
+        # we only need id, provider, and url to display them
+        result = (
+            calDb.table("externals")
+            .select("id, provider, url")
+            .eq("user_id", uid)
+            .execute()
+        )
+        providersList = result.data or []
+
+    except Exception as e:
+        status = "error"
+        message = f"Couldn't load external connections for uid {uid}: {e}"
+
     return render_page(
         "Manage Externals",
         "user",
         user_nav(),
         "user/externals.html",
-        providers=provs,
+        providers=providersList,
+        status=status,
+        message=message,
     )
 
 
@@ -42,7 +62,9 @@ def manage_calendars():
     calDb = None
     try:
         calDb = _get_ui_supabase_client()
-        result = (
+
+        # first get the calendars this user owns
+        owned_result = (
             calDb.table("calendars")
             .select(
                 "id, name, owner_id, member_ids, events, guest_link_token, guest_link_role, guest_link_active"
@@ -51,22 +73,67 @@ def manage_calendars():
             .order("age_timestamp", desc=False)
             .execute()
         )
-        records = result.data or []
+        ownedRecs = owned_result.data or []
+
+        # then get calendars where the user is a member but not the owner
+        member_result = (
+            calDb.table("calendars")
+            .select(
+                "id, name, owner_id, member_ids, events, guest_link_token, guest_link_role, guest_link_active"
+            )
+            .overlaps("member_ids", [ownerId])
+            .order("age_timestamp", desc=False)
+            .execute()
+        )
+        memberRecs = member_result.data or []
+
+        # merge the two lists without duplicates
+        records = []
+        seenIds = []
+        for c in ownedRecs:
+            seenIds.append(c["id"])
+            records.append(c)
+        for c in memberRecs:
+            if c["id"] not in seenIds:
+                seenIds.append(c["id"])
+                records.append(c)
+
     except Exception as e:
-        # handle the case where guest link columns dont exist yet
+        # handle the case where guest link columns don't exist yet
         if "guest_link_" in str(e):
             has_guest_link_fields = False
             try:
                 if not calDb:
                     calDb = _get_ui_supabase_client()
-                fallback = (
+
+                # fallback owned query without guest link fields
+                fb_owned = (
                     calDb.table("calendars")
                     .select("id, name, owner_id, member_ids, events")
                     .eq("owner_id", ownerId)
                     .order("age_timestamp", desc=False)
                     .execute()
                 )
-                records = fallback.data or []
+                # fallback member query without guest link fields
+                fb_member = (
+                    calDb.table("calendars")
+                    .select("id, name, owner_id, member_ids, events")
+                    .overlaps("member_ids", [ownerId])
+                    .order("age_timestamp", desc=False)
+                    .execute()
+                )
+                fbOwned = fb_owned.data or []
+                fbMember = fb_member.data or []
+                records = []
+                fbSeen = []
+                for c in fbOwned:
+                    fbSeen.append(c["id"])
+                    records.append(c)
+                for c in fbMember:
+                    if c["id"] not in fbSeen:
+                        fbSeen.append(c["id"])
+                        records.append(c)
+
                 status = "error"
                 message = (
                     "Guest links are unavailable because calendar guest-link columns are missing. "
@@ -284,15 +351,36 @@ def manage_events():
 
     try:
         calDb = _get_ui_supabase_client()
-        # get the user's calendars so we can show a dropdown
-        calendars_result = (
+        # get owned calendars first
+        owned_result = (
             calDb.table("calendars")
             .select("id, name")
             .eq("owner_id", userId)
             .order("age_timestamp", desc=False)
             .execute()
         )
-        calendars = calendars_result.data or []
+        ownedCals = owned_result.data or []
+
+        # also get calendars where the user is a member
+        member_result = (
+            calDb.table("calendars")
+            .select("id, name")
+            .overlaps("member_ids", [userId])
+            .order("age_timestamp", desc=False)
+            .execute()
+        )
+        memberCals = member_result.data or []
+
+        # combine without duplicates
+        calendars = []
+        seenIds = []
+        for c in ownedCals:
+            seenIds.append(c["id"])
+            calendars.append(c)
+        for c in memberCals:
+            if c["id"] not in seenIds:
+                seenIds.append(c["id"])
+                calendars.append(c)
 
         if calendars:
             # check if the requested calendar id is in the list
@@ -470,18 +558,341 @@ def delete_calendar(calendar_id):
         )
 
 
+@ui_bp.route("/user/events/<event_id>/edit", methods=["GET", "POST"])
+@ui_login_required
+def edit_event(event_id):
+    # get the user id from the session
+    uid = _ui_user()["id"]
+
+    calDb = _get_ui_supabase_client()
+
+    if request.method == "GET":
+        # we need to load the event so we can prefill the form
+        # also need to check the user actually owns it
+        try:
+            eventResult = (
+                calDb.table("events")
+                .select("id, title, description, start_timestamp, end_timestamp, calendar_ids, owner_id")
+                .eq("id", event_id)
+                .eq("owner_id", uid)
+                .execute()
+            )
+            # if nothing came back then either it doesn't exist or they don't own it
+            if len(eventResult.data) == 0:
+                return redirect(
+                    url_for(
+                        "ui.manage_events",
+                        status="error",
+                        message=f"Event {event_id} not found for uid {uid}",
+                    )
+                )
+            eventData = eventResult.data[0]
+        except Exception as e:
+            return redirect(
+                url_for(
+                    "ui.manage_events",
+                    status="error",
+                    message=f"Couldn't load event {event_id}: {e}",
+                )
+            )
+
+        # also load the users calendars so we can show a calendar picker on the form
+        calendarsList = []
+        try:
+            calsResult = (
+                calDb.table("calendars")
+                .select("id, name")
+                .eq("owner_id", uid)
+                .execute()
+            )
+            calendarsList = calsResult.data or []
+        except Exception as err:
+            # not a fatal error, we can still show the form without the picker
+            pass
+
+        return render_page(
+            "Edit Event",
+            "user",
+            user_nav(),
+            "user/events_edit.html",
+            event=eventData,
+            calendars=calendarsList,
+        )
+
+    # POST - save the changes
+    # get all the form fields
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    start_timestamp = (request.form.get("start_timestamp") or "").strip()
+    end_timestamp = (request.form.get("end_timestamp") or "").strip()
+
+    # title is the only required field
+    if len(title) == 0:
+        return redirect(
+            url_for(
+                "ui.edit_event",
+                event_id=event_id,
+            )
+        )
+
+    try:
+        # first verify ownership before updating
+        # same check as the GET so people can't edit events they don't own
+        ownerCheck = (
+            calDb.table("events")
+            .select("id")
+            .eq("id", event_id)
+            .eq("owner_id", uid)
+            .execute()
+        )
+        if len(ownerCheck.data) == 0:
+            return redirect(
+                url_for(
+                    "ui.manage_events",
+                    status="error",
+                    message=f"Event {event_id} not owned by uid {uid}",
+                )
+            )
+
+        # build the update payload
+        # only include timestamp fields if they have a value
+        updatePayload = {"title": title, "description": description}
+        if start_timestamp:
+            updatePayload["start_timestamp"] = start_timestamp
+        if end_timestamp:
+            updatePayload["end_timestamp"] = end_timestamp
+
+        calDb.table("events").update(updatePayload).eq("id", event_id).eq("owner_id", uid).execute()
+
+        return redirect(
+            url_for(
+                "ui.manage_events",
+                status="ok",
+                message=f"Event {event_id} updated.",
+            )
+        )
+    except Exception as exc:
+        return redirect(
+            url_for(
+                "ui.manage_events",
+                status="error",
+                message=f"edit event failed for event {event_id}: {exc}",
+            )
+        )
+
+
+@ui_bp.route("/user/events/<event_id>/delete", methods=["POST"])
+@ui_login_required
+def delete_event(event_id):
+    # grab the logged in user id
+    uid = _ui_user()["id"]
+    # we also need to know which calendar to go back to after deleting
+    # the form sends it as a hidden field
+    calendarId = (request.form.get("calendar_id") or "").strip()
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # check that this event belongs to the user before we delete it
+        # we dont want someone deleting events they dont own
+        ownerCheck = (
+            calDb.table("events")
+            .select("id")
+            .eq("id", event_id)
+            .eq("owner_id", uid)
+            .execute()
+        )
+
+        # if the list is empty the event either doesnt exist or belongs to someone else
+        if len(ownerCheck.data) == 0:
+            return redirect(
+                url_for(
+                    "ui.manage_events",
+                    calendar_id=calendarId,
+                    status="error",
+                    message=f"Event {event_id} not found for uid {uid}",
+                )
+            )
+
+        # ok to delete now
+        calDb.table("events").delete().eq("id", event_id).eq("owner_id", uid).execute()
+
+        return redirect(
+            url_for(
+                "ui.manage_events",
+                calendar_id=calendarId,
+                status="ok",
+                message=f"Event {event_id} deleted.",
+            )
+        )
+    except Exception as e:
+        return redirect(
+            url_for(
+                "ui.manage_events",
+                calendar_id=calendarId,
+                status="error",
+                message=f"delete event failed for event {event_id}: {e}",
+            )
+        )
+
+
 @ui_bp.route("/user/friends")
 @ui_login_required
 def manage_friends():
-    # show the friends management page
-    # uses placeholder friends data for now
+    # get the logged in users id
+    uid = _ui_user()["id"]
+    status = (request.args.get("status") or "").strip()
+    message = (request.args.get("message") or "").strip()
+
+    friendsList = []
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # first load the current users row to get their friends array
+        # the friends array is just a list of user ids
+        userRow = (
+            calDb.table("users")
+            .select("friends")
+            .eq("id", uid)
+            .execute()
+        )
+
+        # if the user doesnt have a row in the users table yet just show empty list
+        if len(userRow.data) == 0:
+            friendIds = []
+        else:
+            friendIds = userRow.data[0].get("friends") or []
+
+        # if they have friends we need to look up each one to get their email and display name
+        if len(friendIds) > 0:
+            friendsResult = (
+                calDb.table("users")
+                .select("id, email, display_name")
+                .in_("id", friendIds)
+                .execute()
+            )
+            friendsList = friendsResult.data or []
+
+    except Exception as e:
+        status = "error"
+        message = f"Couldn't load friends for uid {uid}: {e}"
+
     return render_page(
         "Manage Friends",
         "user",
         user_nav(),
         "user/friends.html",
-        friends=placeholder_friends,
+        friends=friendsList,
+        status=status,
+        message=message,
     )
+
+
+@ui_bp.route("/user/friends/add", methods=["POST"])
+@ui_login_required
+def add_friend():
+    # get the current user id
+    uid = _ui_user()["id"]
+    # get the email they typed in the form
+    friendEmail = (request.form.get("email") or "").strip().lower()
+
+    if len(friendEmail) == 0:
+        return redirect(url_for("ui.manage_friends", status="error", message="Email is required."))
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # look up the user by email to get their id
+        lookup = (
+            calDb.table("users")
+            .select("id, email")
+            .eq("email", friendEmail)
+            .execute()
+        )
+
+        if len(lookup.data) == 0:
+            return redirect(
+                url_for("ui.manage_friends", status="error", message=f"No user found with email {friendEmail}")
+            )
+
+        friendId = lookup.data[0]["id"]
+
+        # cant add yourself
+        if friendId == uid:
+            return redirect(
+                url_for("ui.manage_friends", status="error", message="You can't add yourself as a friend")
+            )
+
+        # get the current friends list so we can check for duplicates
+        userRow = calDb.table("users").select("friends").eq("id", uid).execute()
+        if len(userRow.data) == 0:
+            return redirect(
+                url_for("ui.manage_friends", status="error", message=f"User row not found for uid {uid}")
+            )
+
+        currentFriends = userRow.data[0].get("friends") or []
+
+        # check if they are already a friend
+        alreadyAdded = False
+        for fid in currentFriends:
+            if str(fid) == str(friendId):
+                alreadyAdded = True
+                break
+
+        if alreadyAdded == True:
+            return redirect(
+                url_for("ui.manage_friends", status="error", message=f"{friendEmail} is already in your friends list")
+            )
+
+        # add the new friend id to the array
+        currentFriends.append(friendId)
+        calDb.table("users").update({"friends": currentFriends}).eq("id", uid).execute()
+
+        return redirect(url_for("ui.manage_friends", status="ok", message=f"{friendEmail} added as a friend."))
+
+    except Exception as err:
+        return redirect(
+            url_for("ui.manage_friends", status="error", message=f"add friend failed for uid {uid}: {err}")
+        )
+
+
+@ui_bp.route("/user/friends/remove", methods=["POST"])
+@ui_login_required
+def remove_friend():
+    # get the current user and the friend id to remove
+    uid = _ui_user()["id"]
+    friendId = (request.form.get("friend_id") or "").strip()
+
+    if len(friendId) == 0:
+        return redirect(url_for("ui.manage_friends", status="error", message="Missing friend id"))
+
+    try:
+        calDb = _get_ui_supabase_client()
+
+        # get the current friends list
+        userRow = calDb.table("users").select("friends").eq("id", uid).execute()
+        if len(userRow.data) == 0:
+            return redirect(
+                url_for("ui.manage_friends", status="error", message=f"User row not found for uid {uid}")
+            )
+
+        currentFriends = userRow.data[0].get("friends") or []
+
+        # build a new list without the friend we want to remove
+        newFriends = []
+        for fid in currentFriends:
+            if str(fid) != str(friendId):
+                newFriends.append(fid)
+
+        calDb.table("users").update({"friends": newFriends}).eq("id", uid).execute()
+
+        return redirect(url_for("ui.manage_friends", status="ok", message="Friend removed."))
+
+    except Exception as exc:
+        return redirect(
+            url_for("ui.manage_friends", status="error", message=f"remove friend failed for uid {uid}: {exc}")
+        )
 
 @ui_bp.route("/user/remove-account")
 @ui_login_required

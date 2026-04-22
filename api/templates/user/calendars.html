@@ -45,10 +45,14 @@
             <div class="pill" style="margin-bottom:6px;">Calendar</div>
             <h4 style="margin:0;">{{ cal.name or "Untitled" }}</h4>
           </div>
+          {% if cal.owner_id == owner_id %}
           <form method="POST" action="{{ url_for('ui.delete_calendar', calendar_id=cal.id) }}"
                 onsubmit="return confirm('Delete {{ cal.name or 'this calendar' }}? This cannot be undone.');">
             <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Delete</button>
           </form>
+          {% else %}
+          <span class="muted" style="font-size:12px;">Member</span>
+          {% endif %}
         </div>
 
         <!-- Tab navigation -->
