@@ -3,41 +3,219 @@
 {% block content %}
 <div class="hero">
   <h1>System Logs</h1>
-  <p class="muted">Showing the 5 most recent log entries, newest first.</p>
+  <p class="muted">Click a column header to sort. Use the input to change how many rows are shown.</p>
 </div>
 
-{% if logs %}
-<table>
-  <tr>
-    <th>Time</th>
-    <th>Level</th>
-    <th>Event Type</th>
-    <th>Message</th>
-    <th>Details</th>
-  </tr>
-  {% for log in logs %}
-  <tr>
-    {# created_at looks like "2026-04-21T10:30:00.000Z", we cut it to first 19 chars to get "2026-04-21T10:30:00" #}
-    <td class="cell-mono">{{ log.created_at[:19] if log.created_at else "—" }}</td>
-    <td>
-      {% if log.level == "ERROR" %}
-        <span class="pill" style="background:#fee2e2;color:#dc2626;">ERROR</span>
-      {% elif log.level == "WARNING" %}
-        <span class="pill" style="background:#fef3c7;color:#92400e;">WARN</span>
-      {% else %}
-        <span class="pill">{{ log.level or "—" }}</span>
-      {% endif %}
-    </td>
-    <td>{{ log.event_type or "—" }}</td>
-    <td>{{ log.message or "—" }}</td>
-    <td class="muted cell-mono">{{ log.details or "" }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-{# this shows when the logs list is empty (either no logs exist or supabase was unavailable) #}
-<div class="empty">
-  <p class="muted">No log entries found, or the logging service is unavailable.</p>
+<!-- controls row: limit input and refresh button -->
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+  <label for="limitInput" style="font-size:14px;">Show</label>
+  <input
+    id="limitInput"
+    type="number"
+    min="1"
+    max="500"
+    value="25"
+    style="width:70px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px;"
+  />
+  <span style="font-size:14px;">entries</span>
+  <button
+    onclick="loadLogs()"
+    class="btn btn-sm"
+    style="margin-top:0;"
+  >Refresh</button>
 </div>
-{% endif %}
+
+<!-- the table, tbody gets replaced by javascript -->
+<div id="logs-container">
+  <table>
+    <thead>
+      <tr>
+        <th><span class="sort-header" onclick="sortBy('created_at')">Time <span id="arrow-created_at"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('level')">Level <span id="arrow-level"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('event_type')">Event Type <span id="arrow-event_type"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('message')">Message <span id="arrow-message"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('user_id')">User ID <span id="arrow-user_id"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('path')">Path <span id="arrow-path"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('method')">Method <span id="arrow-method"></span></span></th>
+        <th><span class="sort-header" onclick="sortBy('status_code')">Status <span id="arrow-status_code"></span></span></th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody id="logs-body">
+      <tr>
+        <td colspan="9" class="muted" style="text-align:center; padding:24px;">Loading...</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .sort-header {
+    cursor: pointer;
+    user-select: none;
+  }
+  .sort-header:hover {
+    color: #1d4ed8;
+  }
+</style>
+
+<script>
+  // keep track of the current sort column and direction
+  var currentSort = "created_at";
+  var currentDir = "desc";
+
+  // called when a column header is clicked
+  function sortBy(col) {
+    // if clicking the same column, flip the direction
+    if (currentSort === col) {
+      if (currentDir === "desc") {
+        currentDir = "asc";
+      } else {
+        currentDir = "desc";
+      }
+    } else {
+      // clicking a new column, start with descending
+      currentSort = col;
+      currentDir = "desc";
+    }
+
+    loadLogs();
+  }
+
+  // update the little arrow icons on column headers
+  function updateArrows() {
+    // list of all sortable column names
+    var columns = ["created_at", "level", "event_type", "message", "user_id", "path", "method", "status_code"];
+
+    // loop through each column and set its arrow
+    for (var i = 0; i < columns.length; i++) {
+      var col = columns[i];
+      var arrowEl = document.getElementById("arrow-" + col);
+
+      if (arrowEl === null) {
+        continue;
+      }
+
+      if (col === currentSort) {
+        // show an up or down arrow for the active column
+        if (currentDir === "asc") {
+          arrowEl.textContent = " ▲";
+        } else {
+          arrowEl.textContent = " ▼";
+        }
+      } else {
+        // clear the arrow for non-active columns
+        arrowEl.textContent = "";
+      }
+    }
+  }
+
+  // build one table row as an html string from a log object
+  function buildRow(log) {
+    // format the timestamp: cut to first 19 chars to drop milliseconds
+    var time = "";
+    if (log.created_at) {
+      time = log.created_at.substring(0, 19);
+    }
+
+    // pick a background and text color for the level pill
+    var pillStyle = "background:#dbeafe;color:#1d4ed8;";
+    if (log.level === "ERROR") {
+      pillStyle = "background:#fee2e2;color:#dc2626;";
+    } else if (log.level === "WARNING") {
+      pillStyle = "background:#fef3c7;color:#92400e;";
+    }
+
+    var levelHtml = "<span class=\"pill\" style=\"" + pillStyle + "\">" + (log.level || "—") + "</span>";
+
+    // build each cell value, use a dash if the value is empty
+    var eventType  = log.event_type  || "—";
+    var message    = log.message     || "—";
+    var userId     = log.user_id     || "—";
+    var path       = log.path        || "—";
+    var method     = log.method      || "—";
+    var statusCode = log.status_code || "—";
+    var details    = log.details     || "";
+
+    var row = "<tr>";
+    row += "<td class=\"cell-mono\">" + time + "</td>";
+    row += "<td>" + levelHtml + "</td>";
+    row += "<td>" + eventType + "</td>";
+    row += "<td>" + message + "</td>";
+    row += "<td class=\"cell-mono muted\">" + userId + "</td>";
+    row += "<td class=\"cell-mono\">" + path + "</td>";
+    row += "<td>" + method + "</td>";
+    row += "<td>" + statusCode + "</td>";
+    row += "<td class=\"muted cell-mono\">" + details + "</td>";
+    row += "</tr>";
+
+    return row;
+  }
+
+  // fetch logs from the server and update the table
+  function loadLogs() {
+    // update the arrows so the user knows which column is sorted
+    updateArrows();
+
+    // get the limit value from the input
+    var limitInput = document.getElementById("limitInput");
+    var limit = parseInt(limitInput.value, 10);
+
+    // if the value is not a valid number, fall back to 25
+    if (isNaN(limit) || limit < 1) {
+      limit = 25;
+    }
+
+    // build the url with query parameters
+    var url = "/ui/admin/logs/data?limit=" + limit + "&sort=" + currentSort + "&dir=" + currentDir;
+
+    var tbody = document.getElementById("logs-body");
+
+    // show a loading message while we wait
+    tbody.innerHTML = "<tr><td colspan=\"9\" class=\"muted\" style=\"text-align:center;padding:24px;\">Loading...</td></tr>";
+
+    // make the request to get the log data
+    fetch(url)
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(data) {
+        // if there was an error from the server, show it
+        if (data.error) {
+          tbody.innerHTML = "<tr><td colspan=\"9\" class=\"muted\" style=\"text-align:center;padding:24px;\">Error: " + data.error + "</td></tr>";
+          return;
+        }
+
+        var logs = data.logs;
+
+        // if there are no logs, show an empty message
+        if (!logs || logs.length === 0) {
+          tbody.innerHTML = "<tr><td colspan=\"9\" class=\"muted\" style=\"text-align:center;padding:24px;\">No log entries found.</td></tr>";
+          return;
+        }
+
+        // build all the rows and put them in the table
+        var html = "";
+        for (var i = 0; i < logs.length; i++) {
+          html += buildRow(logs[i]);
+        }
+        tbody.innerHTML = html;
+      })
+      .catch(function(err) {
+        // something went wrong with the fetch itself (network error etc)
+        tbody.innerHTML = "<tr><td colspan=\"9\" class=\"muted\" style=\"text-align:center;padding:24px;\">Could not load logs. Check your connection.</td></tr>";
+        console.error("fetch error:", err);
+      });
+  }
+
+  // load logs as soon as the page finishes loading
+  window.onload = function() {
+    loadLogs();
+  };
+
+  // also reload when the limit input changes
+  document.getElementById("limitInput").addEventListener("change", function() {
+    loadLogs();
+  });
+</script>
 {% endblock %}
