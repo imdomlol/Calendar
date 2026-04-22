@@ -21,17 +21,16 @@
 {% endif %}
 
 
-<div class="grid">
+<div class="grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0; justify-items: center; align-items: stretch;">
   <!-- Empty calendar card for creation -->
-  <div class="card empty-calendar-card" style="opacity:0.95; border-style: dashed; border-color: #cbd5e1; max-width: 400px; margin: 0 auto 24px auto; position: relative;">
-    <div class="pill" style="margin-bottom:10px;">New Calendar</div>
+  <div class="card empty-calendar-card" style="opacity:0.95; border-style: dashed; border-color: #cbd5e1; min-width: 320px; max-width: 340px; width: 100%; height: 320px; margin: 0; position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; background: #f7faff;">
     <form method="POST" action="{{ url_for('ui.create_calendar') }}" style="display: flex; flex-direction: column; gap: 12px;">
       <input type="hidden" name="owner_id" value="{{ owner_id }}" />
       <input type="text" name="name" placeholder="Calendar Title" required style="padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px;" />
       <div style="color:#bdbdbd; font-size:13px; margin-bottom:32px;">
         <em>Details will appear here after creation.</em>
       </div>
-      <button type="submit" class="btn" style="position: absolute; bottom: 18px; right: 18px; border:none; cursor:pointer; margin-top:0; padding: 10px 16px; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 22px; background: #1d4ed8; color: white;">
+      <button type="submit" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: #1d4ed8; color: white;">
         +
       </button>
     </form>
@@ -39,19 +38,22 @@
 
   {% if calendars %}
     {% for cal in calendars %}
-      <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+      <div class="card" style="background: #f7faff; min-width: 320px; max-width: 340px; width: 100%; height: 320px; margin: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start;">
+
+        <div style="position: relative; margin-bottom:10px; min-height: 32px;">
           <div>
-            <div class="pill" style="margin-bottom:6px;">Calendar</div>
             <h4 style="margin:0;">{{ cal.name or "Untitled" }}</h4>
           </div>
           {% if cal.owner_id == owner_id %}
           <form method="POST" action="{{ url_for('ui.delete_calendar', calendar_id=cal.id) }}"
-                onsubmit="return confirm('Delete {{ cal.name or 'this calendar' }}? This cannot be undone.');">
-            <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Delete</button>
+                onsubmit="return confirm('Delete {{ cal.name or 'this calendar' }}? This cannot be undone.');"
+                style="position: absolute; top: 0; right: 0; z-index: 2; background: none;">
+            <button type="submit" class="btn danger btn-sm" title="Delete" style="background: none; color: #dc2626; border: none; font-size: 22px; padding: 0 8px; line-height: 1; cursor: pointer; box-shadow: none;">
+              &times;
+            </button>
           </form>
           {% else %}
-          <span class="muted" style="font-size:12px;">Member</span>
+          <span class="muted" style="font-size:12px; position: absolute; top: 0; right: 0;">Member</span>
           {% endif %}
         </div>
 
