@@ -1,5 +1,5 @@
 from api.ui_routes import ui_bp
-from flask import redirect, request, url_for
+from flask import redirect, request, url_for, jsonify
 from api.ui_routes.helpers import (
     _get_ui_supabase_client,
     render_page,
@@ -8,6 +8,15 @@ from api.ui_routes.helpers import (
 )
 from api.ui_routes.helpers import _resolve_app_base_url, _ui_user
 import secrets
+
+
+@ui_bp.route("/me/token")
+@ui_login_required
+def get_token():
+    # return the current session user's jwt so javascript can use it
+    # to make authenticated calls to the rest api
+    token = _ui_user().get("access_token")
+    return jsonify({"token": token})
 
 
 @ui_bp.route("/user/externals")
