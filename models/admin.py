@@ -8,15 +8,15 @@ class Admin(User):
     # Admin inherits from User and gets all the regular user stuff
     # plus these extra admin-only actions
 
-    def suspendUserAccount(self, user_id: str) -> Any:
+    def suspendUserAccount(self, userId: str) -> Any:
         # suspend a user by removing all their externals and calendars
         # this is the simplest way to lock someone out without touching auth
         db = get_supabase_client()
         # remove all their external calendar links
-        db.table("externals").delete().eq("user_id", user_id).execute()
+        db.table("externals").delete().eq("user_id", userId).execute()
         # remove all calendars they own
-        result = db.table("calendars").delete().eq("owner_id", user_id).execute()
-        logEvent("INFO", "admin", f"admin suspended user {user_id}", userId=user_id)
+        result = db.table("calendars").delete().eq("owner_id", userId).execute()
+        logEvent("INFO", "admin", f"admin suspended user {userId}", userId=userId)
         return result
 
     def viewSystemLogs(self) -> Any:
@@ -30,8 +30,8 @@ class Admin(User):
         # in the future this could send emails or push notifications
         logEvent("INFO", "notification", message)
 
-    def unlinkAllExternalCalendars(self, user_id: str) -> Any:
+    def unlinkAllExternalCalendars(self, userId: str) -> Any:
         # remove every external calendar linked to a specific user
         db = get_supabase_client()
-        result = db.table("externals").delete().eq("user_id", user_id).execute()
+        result = db.table("externals").delete().eq("user_id", userId).execute()
         return result

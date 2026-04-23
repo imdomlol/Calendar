@@ -34,16 +34,50 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form method="POST"
-                  action="{{ url_for('ui.settings_sync_google', external_id=row.id) }}"
-                  style="margin:0;">
+            <form onsubmit="return pullExternal('{{ row.id }}', this);" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form method="POST"
-                  action="{{ url_for('ui.settings_push_google', external_id=row.id) }}"
-                  style="margin:0;">
+            <form onsubmit="return pushExternal('{{ row.id }}', this);" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
+            <script>
+            async function pullExternal(externalId, form) {
+              try {
+                const resp = await fetch(`/externals/${externalId}/pull`, {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'same-origin',
+                });
+                if (resp.ok) {
+                  location.reload();
+                } else {
+                  const data = await resp.json();
+                  alert('Pull failed: ' + (data.error || resp.status));
+                }
+              } catch (e) {
+                alert('Pull failed: ' + e);
+              }
+              return false;
+            }
+            async function pushExternal(externalId, form) {
+              try {
+                const resp = await fetch(`/externals/${externalId}/push`, {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'same-origin',
+                });
+                if (resp.ok) {
+                  location.reload();
+                } else {
+                  const data = await resp.json();
+                  alert('Push failed: ' + (data.error || resp.status));
+                }
+              } catch (e) {
+                alert('Push failed: ' + e);
+              }
+              return false;
+            }
+            </script>
             <form method="POST"
                   action="{{ url_for('ui.settings_disconnect_google', external_id=row.id) }}"
                   style="margin:0;">

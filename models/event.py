@@ -5,63 +5,60 @@ class Event:
     def __init__(
         self,
         title: str,
-        supabase_client: Any,
-        calendar_ids: list[str],
-        owner_id: str | None = None,
+        supabaseClient: Any,
+        calendarIds: list[str],
+        ownerId: str | None = None,
         description: str | None = None,
-        start_timestamp: str | None = None,
-        end_timestamp: str | None = None,
+        startTimestamp: str | None = None,
+        endTimestamp: str | None = None,
     ) -> None:
         self.id: str | None = None
-        self.supabase_client = supabase_client
-        self.owner_id = owner_id
+        self.supabaseClient = supabaseClient
+        self.ownerId = ownerId
         self.title = title
-        self.calendar_ids = calendar_ids
+        self.calendarIds = calendarIds
         self.description = description
-        self.start_timestamp = start_timestamp
-        self.end_timestamp = end_timestamp
-        self.age_timestamp: str | None = None
+        self.startTimestamp = startTimestamp
+        self.endTimestamp = endTimestamp
+        self.ageTimestamp: str | None = None
 
     def to_record(self) -> dict[str, Any]:
-        # turn the event into a dict for inserting into the database
-        # all the keys need to match the column names in the events table
-        # we build the whole thing then return it
+        # build a dict with column names matching the events table in supabase
         rec = {
             "id": self.id,
-            "owner_id": self.owner_id,
-            "calendar_ids": self.calendar_ids,
+            "owner_id": self.ownerId,
+            "calendar_ids": self.calendarIds,
             "title": self.title,
             "description": self.description,
-            "start_timestamp": self.start_timestamp,
-            "end_timestamp": self.end_timestamp,
-            "age_timestamp": self.age_timestamp,
+            "start_timestamp": self.startTimestamp,
+            "end_timestamp": self.endTimestamp,
+            "age_timestamp": self.ageTimestamp,
         }
-        # return the dict to whoever asked for it
         return rec
 
-
     def save(self) -> Any:
-        return self.supabase_client.table("events").insert(self.to_record()).execute()
+        # insert this event into the database
+        return self.supabaseClient.table("events").insert(self.to_record()).execute()
 
     def remove(self) -> Any:
-        idMissing = self.id is None
-        if idMissing == True:
-            raise ValueError("Event must be saved before removed.")
-        return self.supabase_client.table("events").delete().match({"id": self.id}).execute()
-
-
-    def edit(self, title=None, description=None, start_timestamp=None, end_timestamp=None, calendar_ids=None) -> Any:
+        # delete this event from the database
         if self.id is None:
-            raise ValueError("Event must be saved before edited.")
+            raise ValueError("Event must be saved before it can be removed")
+        return self.supabaseClient.table("events").delete().match({"id": self.id}).execute()
+
+    def edit(self, title=None, description=None, startTimestamp=None, endTimestamp=None, calendarIds=None) -> Any:
+        # update one or more fields on this event
+        if self.id is None:
+            raise ValueError("Event must be saved before it can be edited")
         recordData = self.to_record()
         if title is not None:
             recordData["title"] = title
         if description is not None:
             recordData["description"] = description
-        if start_timestamp is not None:
-            recordData["start_timestamp"] = start_timestamp
-        if end_timestamp is not None:
-            recordData["end_timestamp"] = end_timestamp
-        if calendar_ids is not None:
-            recordData["calendar_ids"] = calendar_ids
-        return self.supabase_client.table("events").update(recordData).match({"id": self.id}).execute()
+        if startTimestamp is not None:
+            recordData["start_timestamp"] = startTimestamp
+        if endTimestamp is not None:
+            recordData["end_timestamp"] = endTimestamp
+        if calendarIds is not None:
+            recordData["calendar_ids"] = calendarIds
+        return self.supabaseClient.table("events").update(recordData).match({"id": self.id}).execute()
