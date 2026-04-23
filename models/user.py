@@ -174,6 +174,29 @@ class User(Guest):
         result = db.table("externals").select("*").eq("id", external_id).execute()
         return result.data
 
+    def addExternal(self, url: str, provider: str, access_token: str | None = None, refresh_token: str | None = None) -> Any:
+        # add an external calendar to this user
+        db = get_supabase_client()
+        ext = External(
+            id=None,
+            url=url,
+            provider=provider,
+            supabase_client=db,
+            user_id=self.user_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+        return ext.save()
+
+    def removeExternal(self, external_id: str) -> Any:
+        # remove a single external calendar link
+        db = get_supabase_client()
+        # Only allow removing if the external belongs to this user
+        existing = db.table("externals").select("id").eq("id", external_id).eq("user_id", self.user_id).execute()
+        if not existing.data:
+            raise ValueError("External not found or not owned by user")
+        return db.table("externals").delete().eq("id", external_id).execute()
+
     # -------------------------
     # Friend stuff
     # -------------------------
@@ -182,14 +205,22 @@ class User(Guest):
         # just return the current friends list
         return self.friends
 
-    def addFriend(self, user_id: str) -> None:
+    def listFriends(self) -> list:
+        # get the friends list from the db
+        db = get_supabase_client()
+        result = db.table("users").select("friends").eq("id", self.user_id).execute()
+        if not result.data:
+            return []
+        return result.data[0].get("friends") or []
+
+    def addFriend(self, friend_id: str = None, email: str = None) -> Any:
         # cant add yourself
-        if user_id == self.user_id:
+        if friend_id == self.user_id:
             raise ValueError("User cannot add themselves as a friend")
         # check if already in the list
-        if user_id in self.friends:
-            raise ValueError(f"User {user_id} is already a friend.")
-        self.friends.append(user_id)
+        if friend_id in self.friends:
+            raise ValueError(f"User {friend_id} is already a friend.")
+        self.friends.append(friend_id)
 
     def removeFriend(self, user_id: str) -> None:
         if user_id not in self.friends:
@@ -201,6 +232,11 @@ class User(Guest):
     # -------------------------
 
     def removeAccount(self) -> Any:
+        # delete this user's record from the users table
+        db = get_supabase_client()
+        return db.table("users").delete().eq("id", self.user_id).execute()
+
+    def removeSelf(self) -> Any:
         # delete this user's record from the users table
         db = get_supabase_client()
         return db.table("users").delete().eq("id", self.user_id).execute()

@@ -90,7 +90,11 @@ def serverError(e):
 
 def _make_user() -> User:
     # build a User from the authenticated request context
-    return User(user_id=g.user["id"], display_name="", email=g.user.get("email", ""))
+    return User(
+        user_id=g.user["id"],
+        display_name=g.user.get("display_name", ""),
+        email=g.user.get("email", "")
+    )
 
 
 @calApp.route("/calendars", methods=["GET"])
@@ -104,14 +108,12 @@ def listCalendars():
 @calApp.route("/calendars", methods=["POST"])
 @require_auth
 def createCalendar():
-    user_id = g.user["id"]
     body = request.get_json(silent=True) or {}
     name = body.get("name")
     if not name:
         abort(400, description="name is required")
-    cal = Calendar(name=name, owner_id=user_id)
-    result = cal.save()
-    #calendar created
+    user = _make_user()
+    result = user.createCalendar(name)
     return result.data[0], 201
 
 @calApp.route("/calendars/<calendar_id>", methods=["DELETE"])
@@ -205,50 +207,29 @@ def listExternals():
 @calApp.route("/externals", methods=["POST"])
 @require_auth
 def createExternal():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
     body = request.get_json(silent=True) or {}
-    # get the url from the request body
-    if "url" in body:
-        url = body["url"]
-    else:
-        url = None
-    # get the provider from the body
-    if "provider" in body:
-        provider = body["provider"]
-    else:
-        provider = None
+    url = body.get("url")
+    provider = body.get("provider")
     if not url or not provider:
         abort(400, description="url and provider are required")
-    ext = External(
-        id=None,
+    user = _make_user()
+    result = user.addExternal(
         url=url,
         provider=provider,
-        supabase_client=supabase,
-        user_id=user_id,
         access_token=body.get("access_token"),
         refresh_token=body.get("refresh_token"),
     )
-    result = ext.save()
     return result.data[0], 201
 
 @calApp.route("/externals/<external_id>", methods=["DELETE"])
 @require_auth
 def deleteExternal(external_id):
-    supabase = get_supabase_client()
-    uid = g.user["id"]
-    existing = (
-        supabase.table("externals")
-        .select("id")
-        .eq("id", external_id)
-        .eq("user_id", uid)
-        .execute()
-    )
-    if not existing.data:
+    user = _make_user()
+    try:
+        user.removeExternal(external_id)
+    except ValueError:
         abort(404)
-    else:
-        supabase.table("externals").delete().eq("id", external_id).execute()
-        return "", 204
+    return "", 204
 
 
 @calApp.route("/me", methods=["GET"])
@@ -270,9 +251,8 @@ def getMe():
 @calApp.route("/me", methods=["DELETE"])
 @require_auth
 def deleteMe():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    supabase.table("users").delete().eq("id", user_id).execute()
+    user = _make_user()
+    user.removeSelf()
     return "", 204
 
 
@@ -318,22 +298,13 @@ def revokeGuestLink(calendar_id):
 @calApp.route("/calendars/<calendar_id>/members", methods=["POST"])
 @require_auth
 def addMember(calendar_id):
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    # only the owner can add members
-    existing = supabase.table("calendars").select("*").eq("id", calendar_id).eq("owner_id", user_id).execute()
-    if not existing.data:
-        abort(404)
     body = request.get_json(silent=True) or {}
     member_id = body.get("member_id")
     if not member_id:
         abort(400, description="member_id is required")
-    calData = existing.data[0]
-    cal = Calendar(name=calData["name"], owner_id=calData["owner_id"])
-    cal.id = calendar_id
-    cal.member_ids = calData["member_ids"]
+    user = _make_user()
     try:
-        cal.add_member(member_id)
+        user.addMember(calendar_id, member_id)
     except Exception as e:
         abort(400, description=str(e))
     return {"member_id": member_id}, 201
@@ -342,19 +313,10 @@ def addMember(calendar_id):
 @calApp.route("/calendars/<calendar_id>/members/<member_id>", methods=["DELETE"])
 @require_auth
 def removeMember(calendar_id, member_id):
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    # only the owner can remove members
-    existing = supabase.table("calendars").select("*").eq("id", calendar_id).eq("owner_id", user_id).execute()
-    if not existing.data:
-        abort(404)
-    calData = existing.data[0]
-    cal = Calendar(name=calData["name"], owner_id=calData["owner_id"])
-    cal.id = calendar_id
-    cal.member_ids = calData["member_ids"]
+    user = _make_user()
     try:
-        cal.remove_member(member_id)
-    except KeyError:
+        user.removeMember(calendar_id, member_id)
+    except ValueError:
         abort(404)
     return "", 204
 
@@ -362,44 +324,23 @@ def removeMember(calendar_id, member_id):
 @calApp.route("/friends", methods=["GET"])
 @require_auth
 def listFriends():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    result = supabase.table("users").select("friends").eq("id", user_id).execute()
-    if not result.data:
-        return {"friends": []}
-    friends = result.data[0].get("friends") or []
+    user = _make_user()
+    friends = user.listFriends()
     return {"friends": friends}
 
 
 @calApp.route("/friends", methods=["POST"])
 @require_auth
 def addFriend():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
     body = request.get_json(silent=True) or {}
     friend_id = body.get("friend_id")
     email = body.get("email")
-    # accept either a friend_id directly or an email to look up
-    if not friend_id and not email:
-        abort(400, description="friend_id or email is required")
-    if email and not friend_id:
-        # look up the user by email so we can get their id
-        lookup = supabase.table("users").select("id").eq("email", email).execute()
-        if not lookup.data:
-            abort(404, description="no user found with that email")
-        friend_id = lookup.data[0]["id"]
-    if friend_id == user_id:
-        abort(400, description="cannot add yourself as a friend")
-    # load the current friends list then append
-    result = supabase.table("users").select("friends").eq("id", user_id).execute()
-    if not result.data:
-        abort(404)
-    friends = result.data[0].get("friends") or []
-    if friend_id in friends:
-        abort(400, description="already friends")
-    friends.append(friend_id)
-    supabase.table("users").update({"friends": friends}).eq("id", user_id).execute()
-    return {"friend_id": friend_id}, 201
+    user = _make_user()
+    try:
+        friends = user.addFriend(friend_id=friend_id, email=email)
+    except ValueError as e:
+        abort(400, description=str(e))
+    return {"friends": friends}
 
 
 @calApp.route("/friends/<friend_id>", methods=["DELETE"])
