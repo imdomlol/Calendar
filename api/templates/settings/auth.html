@@ -78,11 +78,8 @@
               return false;
             }
             </script>
-            <form method="POST"
-                  action="{{ url_for('ui.settings_disconnect_google', external_id=row.id) }}"
-                  style="margin:0;">
-              <button type="submit" class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;">Disconnect</button>
-            </form>
+            <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
+                    onclick="disconnectExternal('{{ row.id }}')">Disconnect</button>
           </td>
         </tr>
       {% endfor %}
@@ -91,4 +88,29 @@
     {% endif %}
   </table>
 </div>
+<script>
+var SETTINGS_TOKEN = null;
+function getToken(callback) {
+    if (SETTINGS_TOKEN) { callback(SETTINGS_TOKEN); return; }
+    fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { SETTINGS_TOKEN = d.token; callback(SETTINGS_TOKEN); });
+}
+
+function disconnectExternal(externalId) {
+    if (!confirm('Disconnect this account?')) return;
+    getToken(function(token) {
+        fetch('/externals/' + externalId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not disconnect.');
+            }
+        });
+    });
+}
+</script>
 {% endblock %}

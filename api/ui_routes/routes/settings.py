@@ -301,22 +301,23 @@ def settings_sync_google(external_id):
             .execute()
         )
         # find or create the import calendar so synced events stay separate
+        access_token = _ui_user()["access_token"]
+        base_url = _resolve_app_base_url()
         if cal_result.data:
             calendar_id = str(cal_result.data[0]["id"])
         else:
-            new_cal = (
-                calDb.table("calendars")
-                .insert(
-                    {
-                        "name": "Google Calendar (Synced)",
-                        "owner_id": uid,
-                        "member_ids": [uid],
-                        "events": [],
-                    }
-                )
-                .execute()
+            cal_req = urlreq.Request(
+                f"{base_url}/calendars",
+                data=json.dumps({"name": "Google Calendar (Synced)"}).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
             )
-            calendar_id = str(new_cal.data[0]["id"])
+            with urlreq.urlopen(cal_req) as cal_resp:
+                cal_data = json.loads(cal_resp.read().decode("utf-8"))
+            calendar_id = str(cal_data["id"])
 
         # build the payloads list by looping through the google events
         payloads = []
@@ -327,7 +328,6 @@ def settings_sync_google(external_id):
             payload = {
                 "title": g_event.get("summary") or "Untitled Event",
                 "calendar_ids": [calendar_id],
-                "owner_id": uid,
                 "start_timestamp": start.get("dateTime") or start.get("date"),
                 "end_timestamp": end.get("dateTime") or end.get("date"),
             }
@@ -335,9 +335,20 @@ def settings_sync_google(external_id):
                 payload["description"] = g_event["description"]
             payloads.append(payload)
 
+        inserted = 0
         if len(payloads) > 0:
-            calDb.table("events").insert(payloads).execute()
-        inserted = len(payloads)
+            bulk_req = urlreq.Request(
+                f"{base_url}/events/bulk",
+                data=json.dumps({"events": payloads}).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urlreq.urlopen(bulk_req) as bulk_resp:
+                bulk_data = json.loads(bulk_resp.read().decode("utf-8"))
+            inserted = bulk_data.get("created", 0)
 
         return redirect(
             url_for(
@@ -501,56 +512,3 @@ def settings_push_google(external_id):
         )
 
 
-@ui_bp.route("/settings/external/google/<external_id>/disconnect", methods=["POST"])
-@ui_login_required
-def settings_disconnect_google(external_id):
-    uid = _ui_user()["id"]
-
-    try:
-        calDb = _get_ui_supabase_client()
-        existing = (
-            calDb.table("externals")
-            .select("id, provider")
-            .eq("id", external_id)
-            .eq("user_id", uid)
-            .execute()
-        )
-
-        rows = existing.data or []
-        if len(rows) == 0:
-            return redirect(
-                url_for(
-                    "ui.settings_page", status="error", message=f"External {external_id} not found"
-                )
-            )
-
-        provName = str(rows[0].get("provider") or "").lower()
-        isGoogle = "google" in provName
-        if isGoogle == False:
-            return redirect(
-                url_for(
-                    "ui.settings_page",
-                    status="error",
-                    message="Only Google connections can be removed from this section.",
-                )
-            )
-
-        calDb.table("externals").delete().eq("id", external_id).eq(
-            "user_id", uid
-        ).execute()
-        return redirect(
-            url_for(
-                "ui.settings_page",
-                status="ok",
-                message="Google connection disconnected.",
-            )
-        )
-
-    except Exception as err:
-        return redirect(
-            url_for(
-                "ui.settings_page",
-                status="error",
-                message=f"disconnect failed for external {external_id}: {err}",
-            )
-        )

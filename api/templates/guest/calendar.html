@@ -81,54 +81,55 @@ function esc(s) {
 function escA(s) { return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 /* ── fetch helpers ──────────────────────────────────────────── */
-function sendForm(url, data) {
-    // send form data to a flask route and reload on success
-    var formData = new FormData();
-    for (var key in data) {
-        if (data[key] !== null && data[key] !== undefined) {
-            formData.append(key, data[key]);
-        }
-    }
-    fetch(url, { method: 'POST', body: formData })
-        .then(function(r) {
-            if (r.ok) {
-                window.location.reload();
-            } else {
-                alert('Something went wrong. Please try again.');
-            }
-        });
-}
-
 function createGuestEvent() {
     var title = document.getElementById('new-ev-title').value.trim();
     var start = document.getElementById('new-ev-start').value;
-    var end = document.getElementById('new-ev-end').value;
-    var desc = document.getElementById('new-ev-desc').value.trim();
+    var end   = document.getElementById('new-ev-end').value;
+    var desc  = document.getElementById('new-ev-desc').value.trim();
     if (!title) { alert('Title is required.'); return; }
-    sendForm('/ui/guest/' + TOKEN + '/events/create', {
-        title: title,
-        start_timestamp: start,
-        end_timestamp: end,
-        description: desc
+    fetch('/guest/' + TOKEN + '/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: title,
+            start_timestamp: start || null,
+            end_timestamp: end || null,
+            description: desc || null
+        })
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not create event.'); }
     });
 }
 
 function editGuestEvent(eventId) {
     var title = document.getElementById('edit-title-' + eventId).value.trim();
     var start = document.getElementById('edit-start-' + eventId).value;
-    var end = document.getElementById('edit-end-' + eventId).value;
-    var desc = document.getElementById('edit-desc-' + eventId).value.trim();
-    sendForm('/ui/guest/' + TOKEN + '/events/' + eventId + '/edit', {
-        title: title,
-        start_timestamp: start,
-        end_timestamp: end,
-        description: desc
+    var end   = document.getElementById('edit-end-'   + eventId).value;
+    var desc  = document.getElementById('edit-desc-'  + eventId).value.trim();
+    fetch('/guest/' + TOKEN + '/events/' + eventId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: title || null,
+            start_timestamp: start || null,
+            end_timestamp: end || null,
+            description: desc || null
+        })
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not save event.'); }
     });
 }
 
 function deleteGuestEvent(eventId) {
     if (!confirm('Delete this event?')) return;
-    sendForm('/ui/guest/' + TOKEN + '/events/' + eventId + '/delete', {});
+    fetch('/guest/' + TOKEN + '/events/' + eventId, {
+        method: 'DELETE'
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not delete event.'); }
+    });
 }
 
 /* ── month view ─────────────────────────────────────────────── */

@@ -169,22 +169,18 @@ function renderDay() {
               style="flex-shrink:0; padding:5px 12px; font-size:.82rem;">Edit</button>
           </div>
           <div id="edit-${ev.id}" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid #f1f5f9;">
-            <form method="POST" action="/ui/user/home/events/${ev.id}/edit?calendar_id=${CALENDAR_ID}"
-                  style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-              <input class="cal-input" name="title" value="${escA(ev.title||'')}" placeholder="Title" required
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <input id="ev-title-${ev.id}" class="cal-input" value="${escA(ev.title||'')}" placeholder="Title"
                      style="grid-column:1/-1;" />
-              <input class="cal-input" type="datetime-local" name="start_timestamp" value="${svStart}" />
-              <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${svEnd}" />
-              <input class="cal-input" name="description" value="${escA(ev.description||'')}"
+              <input id="ev-start-${ev.id}" class="cal-input" type="datetime-local" value="${svStart}" />
+              <input id="ev-end-${ev.id}"   class="cal-input" type="datetime-local" value="${svEnd}" />
+              <input id="ev-desc-${ev.id}"  class="cal-input" value="${escA(ev.description||'')}"
                      placeholder="Description" style="grid-column:1/-1;" />
               <div style="display:flex; gap:8px; grid-column:1/-1;">
-                <button type="submit" class="cal-btn-primary">Save</button>
-                <form method="POST" action="/ui/user/home/events/${ev.id}/delete?calendar_id=${CALENDAR_ID}" style="display:inline;">
-                  <button type="submit" class="cal-btn-danger"
-                          onclick="return confirm('Delete this event?')">Delete</button>
-                </form>
+                <button class="cal-btn-primary" onclick="saveEvent('${ev.id}')">Save</button>
+                <button class="cal-btn-danger" onclick="deleteEvent('${ev.id}')">Delete</button>
               </div>
-            </form>
+            </div>
           </div>
         </div>`;
     });
@@ -207,7 +203,7 @@ function renderDay() {
       <div style="border-top:1px solid #f1f5f9; padding-top:16px; margin-top:8px;">
         <h4 style="margin:0 0 10px; font-size:.95rem; color:#475569;">Add Event</h4>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input id="new-ev-title" class="cal-input" placeholder="Event title"
+          <int id="new-ev-title" class="cal-input" placeholder="Event title"
                  style="grid-column:1/-1;" />
           <input id="new-ev-start" class="cal-input" type="datetime-local" value="${dStr}T09:00" />
           <input id="new-ev-end"   class="cal-input" type="datetime-local" value="${dStr}T10:00" />
@@ -252,6 +248,51 @@ function getToken(callback) {
     fetch('/ui/me/token')
         .then(function(r) { return r.json(); })
         .then(function(d) { TOKEN = d.token; callback(TOKEN); });
+}
+
+function saveEvent(eventId) {
+    var title = document.getElementById('ev-title-' + eventId).value.trim();
+    var start = document.getElementById('ev-start-' + eventId).value;
+    var end   = document.getElementById('ev-end-'   + eventId).value;
+    var desc  = document.getElementById('ev-desc-'  + eventId).value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    getToken(function(token) {
+        fetch('/events/' + eventId, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+                title: title,
+                start_timestamp: start || null,
+                end_timestamp: end || null,
+                description: desc || null
+            })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not save event.');
+            }
+        });
+    });
+}
+
+function deleteEvent(eventId) {
+    if (!confirm('Delete this event?')) return;
+    getToken(function(token) {
+        fetch('/events/' + eventId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not delete event.');
+            }
+        });
+    });
 }
 
 function createEvent() {
