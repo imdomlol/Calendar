@@ -206,17 +206,15 @@ function renderDay() {
 
       <div style="border-top:1px solid #f1f5f9; padding-top:16px; margin-top:8px;">
         <h4 style="margin:0 0 10px; font-size:.95rem; color:#475569;">Add Event</h4>
-        <form method="POST" action="/ui/user/events/create"
-              style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input type="hidden" name="calendar_id" value="${CALENDAR_ID}" />
-          <input class="cal-input" name="title" placeholder="Event title" required
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <input id="new-ev-title" class="cal-input" placeholder="Event title"
                  style="grid-column:1/-1;" />
-          <input class="cal-input" type="datetime-local" name="start_timestamp" value="${dStr}T09:00" />
-          <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${dStr}T10:00" />
-          <input class="cal-input" name="description" placeholder="Description (optional)"
+          <input id="new-ev-start" class="cal-input" type="datetime-local" value="${dStr}T09:00" />
+          <input id="new-ev-end"   class="cal-input" type="datetime-local" value="${dStr}T10:00" />
+          <input id="new-ev-desc"  class="cal-input" placeholder="Description (optional)"
                  style="grid-column:1/-1;" />
-          <button type="submit" class="cal-btn-primary" style="width:max-content;">Create Event</button>
-        </form>
+          <button class="cal-btn-primary" onclick="createEvent()" style="width:max-content;">Create Event</button>
+        </div>
       </div>
     </div>`;
 }
@@ -246,6 +244,44 @@ function shiftDay(dir) {
 function toggleEdit(id) {
   const el = document.getElementById('edit-' + id);
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+var TOKEN = null;
+function getToken(callback) {
+    if (TOKEN) { callback(TOKEN); return; }
+    fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { TOKEN = d.token; callback(TOKEN); });
+}
+
+function createEvent() {
+    var title = document.getElementById('new-ev-title').value.trim();
+    var start = document.getElementById('new-ev-start').value;
+    var end   = document.getElementById('new-ev-end').value;
+    var desc  = document.getElementById('new-ev-desc').value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    getToken(function(token) {
+        fetch('/events', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+                title: title,
+                calendar_ids: [CALENDAR_ID],
+                description: desc,
+                start_timestamp: start,
+                end_timestamp: end
+            })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not create event.');
+            }
+        });
+    });
 }
 
 loadState();
