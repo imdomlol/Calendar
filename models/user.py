@@ -21,6 +21,32 @@ class User(Guest):
     # Calendar stuff
     # -------------------------
 
+    def listCalendars(self) -> list:
+        # get all calendars this user owns or is a member of
+        db = get_supabase_client()
+        owned = db.table("calendars").select("*").eq("owner_id", self.user_id).execute()
+        member = db.table("calendars").select("*").contains("member_ids", [self.user_id]).execute()
+        # combine and deduplicate by id
+        seen = {}
+        for c in (owned.data or []) + (member.data or []):
+            seen[c["id"]] = c
+        return list(seen.values())
+
+    def listEvents(self) -> list:
+        # get all events that belong to any of this user's calendars
+        db = get_supabase_client()
+        calIds = [c["id"] for c in self.listCalendars()]
+        if len(calIds) == 0:
+            return []
+        result = db.table("events").select("*").overlaps("calendar_ids", calIds).execute()
+        return result.data or []
+
+    def listExternals(self) -> list:
+        # get all external calendar connections for this user
+        db = get_supabase_client()
+        result = db.table("externals").select("*").eq("user_id", self.user_id).execute()
+        return result.data or []
+
     def createCalendar(self, name: str) -> Any:
         # make a new calendar owned by this user
         cal = Calendar(name=name, owner_id=self.user_id)

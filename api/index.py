@@ -7,8 +7,7 @@ from flask import abort, g, request
 from utils.logger import logEvent
 from models.calendar import Calendar
 from flask_cors import CORS
-from models.event import Event
-from typing import Any
+from models.user import User
 from api.ui_routes import ui_bp
 from models.external import External
 from utils.auth import require_auth
@@ -89,49 +88,16 @@ def serverError(e):
 
 
 
-def _get_user_calendar_ids(supabase: Any, uid: str) -> list[str]:
-    #get all calendar ids for a user both owned and as a member
-    # first get calendars the user owns
-    ownedResult = supabase.table("calendars").select("id").eq("owner_id", uid).execute()
-    # then get calendars where they are a member
-    memberResult = (
-        supabase.table("calendars")
-        .select("id")
-        .contains("member_ids", [uid])
-        .execute()
-    )
-    # now we combine them
-    # we use a set so there are no duplicates
-    # a set is like a list but no repeats allowed
-    ownedIds = {c["id"] for c in ownedResult.data}
-    memberIds = {c["id"] for c in memberResult.data}
-    # combine both sets using the | operator
-    # | means union which is all items from both
-    combined = ownedIds | memberIds 
-    # convert back to list because other code needs a list
-    result2 = list(combined)
-    return result2
- 
+def _make_user() -> User:
+    # build a User from the authenticated request context
+    return User(user_id=g.user["id"], display_name="", email=g.user.get("email", ""))
+
+
 @calApp.route("/calendars", methods=["GET"])
 @require_auth
 def listCalendars():
-    supabase = get_supabase_client()
-    usr_id = g.user["id"]
-    owned = supabase.table("calendars").select("*").eq("owner_id", usr_id).execute()
-    member = (
-        supabase.table("calendars")
-        .select("*")
-        .contains("member_ids", [usr_id])
-        .execute()
-    )
-    allCalendars = owned.data + member.data
-    # deduplicate by id
-    seen = {} 
-    for c in allCalendars:
-        seen[c["id"]] = c
-    calendars = list(seen.values())
-    # return all calendars for the user both owned and shared
-    return {"calendars": calendars}
+    user = _make_user()
+    return {"calendars": user.listCalendars()}
 
 
 
@@ -153,95 +119,63 @@ def createCalendar():
 def deleteCalendar(calendar_id):
     supabase = get_supabase_client()
     user_id = g.user["id"]
-    existing = (
-        supabase.table("calendars")
-        .select("id")
-        .eq("id", calendar_id)
-        .eq("owner_id", user_id)
-        .execute()
-    )
+    existing = supabase.table("calendars").select("id").eq("id", calendar_id).eq("owner_id", user_id).execute()
     if not existing.data:
         abort(404)
-    cal = Calendar(name="", owner_id=user_id)
-    cal.id = calendar_id
-    cal.remove_calendar()
+    user = _make_user()
+    user.removeCalendar(calendar_id)
     return "", 204
 
 @calApp.route("/events", methods=["GET"])
 @require_auth
 def listEvents():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    calIds = _get_user_calendar_ids(supabase, user_id)
-    # check if there are any calendar ids
-    # if there are none we just return an empty list
-    if len(calIds) == 0:
-        return {"events": []}
-    result = (
-        supabase.table("events")
-        .select("*")
-        .overlaps("calendar_ids", calIds)
-        .execute()
-    )
-    return {"events": result.data}
+    user = _make_user()
+    return {"events": user.listEvents()}
 
 
 
 @calApp.route("/events", methods=["POST"])
 @require_auth
 def createEvent():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
+    user = _make_user()
     body = request.get_json(silent=True) or {}
     title = body.get("title")
     calendar_ids = body.get("calendar_ids", [])
-    # check if title is there
-    titleOk = title is not None and len(title) > 0 
-    # check if calendar ids are there
+    titleOk = title is not None and len(title) > 0
     calOk = calendar_ids is not None and len(calendar_ids) > 0
     if titleOk == False or calOk == False:
         abort(400, description="title and calendar_ids are required")
-    user_cal_ids = set(_get_user_calendar_ids(supabase, user_id))
+    # make sure the user actually has access to the calendars they specified
+    user_cal_ids = set(c["id"] for c in user.listCalendars())
     if not any(cid in user_cal_ids for cid in calendar_ids):
         abort(403)
-    event = Event(
+    result = user.createEvent(
         title=title,
-        supabase_client=supabase,
         calendar_ids=calendar_ids,
-        owner_id=user_id,
         description=body.get("description"),
         start_timestamp=body.get("start_timestamp"),
         end_timestamp=body.get("end_timestamp"),
     )
-    result = event.save()
     return result.data[0], 201
 
 @calApp.route("/events/<event_id>", methods=["PUT"])
 @require_auth
 def editEvent(event_id):
+    user = _make_user()
+    # check the event exists and belongs to one of the user's calendars
     supabase = get_supabase_client()
-    user_id = g.user["id"]
-    userCalIds = set(_get_user_calendar_ids(supabase, user_id)) 
     existing = supabase.table("events").select("calendar_ids").eq("id", event_id).execute()
     if not existing.data:
         abort(404)
+    userCalIds = set(c["id"] for c in user.listCalendars())
     if not any(cid in userCalIds for cid in existing.data[0].get("calendar_ids", [])):
         abort(403)
     body = request.get_json(silent=True) or {}
-    allowed = {
-        "title",
-        "description",
-        "start_timestamp",
-        "end_timestamp",
-        "calendar_ids",
-    }
+    allowed = {"title", "description", "start_timestamp", "end_timestamp", "calendar_ids"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if len(updates) == 0:
-        abort(
-            400,
-            description="no valid fields provided; allowed: title, description, start_timestamp, end_timestamp, calendar_ids",
-        )
-    result = supabase.table("events").update(updates).eq("id", event_id).execute()
+        abort(400, description="no valid fields provided; allowed: title, description, start_timestamp, end_timestamp, calendar_ids")
+    result = user.editEvent(event_id, **updates)
     return result.data[0]
 
 
@@ -249,26 +183,22 @@ def editEvent(event_id):
 @calApp.route("/events/<event_id>", methods=["DELETE"])
 @require_auth
 def deleteEvent(event_id):
+    user = _make_user()
     supabase = get_supabase_client()
-    user_id = g.user["id"]
-    user_cal_ids = set(_get_user_calendar_ids(supabase, user_id))
-    existing = (
-        supabase.table("events").select("calendar_ids").eq("id", event_id).execute()
-    )
+    existing = supabase.table("events").select("calendar_ids").eq("id", event_id).execute()
     if not existing.data:
         abort(404)
-    if not any(cid in user_cal_ids for cid in existing.data[0].get("calendar_ids", [])):
+    userCalIds = set(c["id"] for c in user.listCalendars())
+    if not any(cid in userCalIds for cid in existing.data[0].get("calendar_ids", [])):
         abort(403)
-    supabase.table("events").delete().eq("id", event_id).execute()
+    user.removeEvent(event_id)
     return "", 204
 
 @calApp.route("/externals", methods=["GET"])
 @require_auth
 def listExternals():
-    supabase = get_supabase_client()
-    user_id = g.user["id"]
-    result = supabase.table("externals").select("*").eq("user_id", user_id).execute()
-    return {"externals": result.data}
+    user = _make_user()
+    return {"externals": user.listExternals()}
 
 
 
