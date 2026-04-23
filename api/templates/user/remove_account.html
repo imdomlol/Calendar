@@ -3,11 +3,46 @@
 {% block content %}
 <div class="hero">
   <h1>Remove Account</h1>
-  <p class="muted">This is a placeholder confirmation screen.</p>
+  <p class="muted">This will permanently delete your account.</p>
 </div>
 <div class="card">
   <h4>Danger Zone</h4>
-  <p>This action would permanently remove the user's account.</p>
-  <a class="btn danger" href="{{ url_for('ui.dashboard', role='user') }}">Confirm removal</a>
+  <p>This action would permanently remove your account and cannot be undone.</p>
+  <button onclick="removeAccount()" class="btn danger" style="border:none; cursor:pointer;">Confirm removal</button>
 </div>
+
+<script>
+var TOKEN = null;
+
+function getToken(callback) {
+    if (TOKEN) {
+        callback(TOKEN);
+        return;
+    }
+    fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            TOKEN = data.token;
+            callback(TOKEN);
+        });
+}
+
+function removeAccount() {
+    if (!confirm('Are you sure? This cannot be undone.')) return;
+    getToken(function(token) {
+        fetch('/me', {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                // account is gone so send them to logout
+                window.location.href = '/ui/logout';
+            } else {
+                alert('Could not remove account.');
+            }
+        });
+    });
+}
+</script>
+
 {% endblock %}

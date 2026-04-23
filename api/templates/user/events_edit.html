@@ -10,39 +10,88 @@
 {{ status_banner(status, message) }}
 
 <div class="card" style="max-width:560px;">
-  <form method="POST" action="{{ url_for('ui.edit_event', event_id=event.id) }}"
-        style="display:flex; flex-direction:column; gap:12px;">
+  <div style="display:flex; flex-direction:column; gap:12px;">
 
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Title</label>
-      <input type="text" name="title" value="{{ event.title or '' }}" required
+      <input id="edit-title" type="text" value="{{ event.title or '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Description</label>
-      <input type="text" name="description" value="{{ event.description or '' }}"
+      <input id="edit-description" type="text" value="{{ event.description or '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Start</label>
-      <input type="datetime-local" name="start_timestamp"
+      <input id="edit-start" type="datetime-local"
              value="{{ event.start_timestamp[:16] if event.start_timestamp else '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">End</label>
-      <input type="datetime-local" name="end_timestamp"
+      <input id="edit-end" type="datetime-local"
              value="{{ event.end_timestamp[:16] if event.end_timestamp else '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
     <div style="display:flex; gap:8px; margin-top:4px;">
-      <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Save Changes</button>
+      <button onclick="saveEvent('{{ event.id }}')" class="btn" style="border:none; cursor:pointer; margin-top:0;">Save Changes</button>
       <a href="{{ url_for('ui.manage_events') }}" class="btn" style="background:#6b7280; margin-top:0;">Cancel</a>
     </div>
-  </form>
+  </div>
 </div>
+
+<script>
+var TOKEN = null;
+
+function getToken(callback) {
+    if (TOKEN) {
+        callback(TOKEN);
+        return;
+    }
+    fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            TOKEN = data.token;
+            callback(TOKEN);
+        });
+}
+
+function saveEvent(eventId) {
+    var title = document.getElementById('edit-title').value.trim();
+    var description = document.getElementById('edit-description').value.trim();
+    var start = document.getElementById('edit-start').value;
+    var end = document.getElementById('edit-end').value;
+    if (!title) {
+        alert('Title cannot be empty.');
+        return;
+    }
+    getToken(function(token) {
+        fetch('/events/' + eventId, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+                title: title,
+                description: description,
+                start_timestamp: start,
+                end_timestamp: end
+            })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.href = '/ui/user/events';
+            } else {
+                alert('Could not save event.');
+            }
+        });
+    });
+}
+</script>
+
 {% endblock %}

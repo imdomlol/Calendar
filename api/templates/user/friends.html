@@ -12,12 +12,11 @@
 <div class="grid">
   <div class="card">
     <h4>Add Friend</h4>
-    <form method="POST" action="{{ url_for('ui.add_friend') }}"
-          style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-      <input type="email" name="email" placeholder="Friend's email address" required
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <input id="friend-email" type="email" placeholder="Friend's email address"
              style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
-      <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Add</button>
-    </form>
+      <button onclick="addFriend()" class="btn" style="border:none; cursor:pointer; margin-top:0;">Add</button>
+    </div>
   </div>
 
   <div class="card">
@@ -32,10 +31,8 @@
                 <span class="muted" style="font-size:12px; margin-left:6px;">{{ f.email }}</span>
               {% endif %}
             </div>
-            <form method="POST" action="{{ url_for('ui.remove_friend') }}" style="margin:0;">
-              <input type="hidden" name="friend_id" value="{{ f.id }}" />
-              <button type="submit" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Remove</button>
-            </form>
+            <button onclick="removeFriend('{{ f.id }}')"
+                    class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Remove</button>
           </li>
         {% endfor %}
       </ul>
@@ -44,4 +41,64 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+var TOKEN = null;
+
+function getToken(callback) {
+    if (TOKEN) {
+        callback(TOKEN);
+        return;
+    }
+    fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            TOKEN = data.token;
+            callback(TOKEN);
+        });
+}
+
+function addFriend() {
+    var email = document.getElementById('friend-email').value.trim();
+    if (!email) {
+        alert('Please enter an email address.');
+        return;
+    }
+    getToken(function(token) {
+        fetch('/friends', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ email: email })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                r.json().then(function(data) {
+                    alert('Could not add friend: ' + (data.error || 'unknown error'));
+                });
+            }
+        });
+    });
+}
+
+function removeFriend(friendId) {
+    if (!confirm('Remove this friend?')) return;
+    getToken(function(token) {
+        fetch('/friends/' + friendId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not remove friend.');
+            }
+        });
+    });
+}
+</script>
+
 {% endblock %}

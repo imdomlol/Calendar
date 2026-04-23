@@ -1,4 +1,5 @@
 import os
+import secrets
 from flask import Flask, redirect, url_for
 from supabase import create_client
 from api.auth_routes import auth_bp
@@ -334,3 +335,154 @@ def getMe():
         "role": userRole,
         "last_sign_in_at": lastSignIn,
     }, 200
+
+
+@calApp.route("/me", methods=["DELETE"])
+@require_auth
+def deleteMe():
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    supabase.table("users").delete().eq("id", user_id).execute()
+    return "", 204
+
+
+@calApp.route("/calendars/<calendar_id>/guest-link", methods=["POST"])
+@require_auth
+def createGuestLink(calendar_id):
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    # only the owner can create a guest link
+    existing = supabase.table("calendars").select("id").eq("id", calendar_id).eq("owner_id", user_id).execute()
+    if not existing.data:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    role = body.get("role", "viewer")
+    if role not in ("viewer", "editor"):
+        abort(400, description="role must be viewer or editor")
+    token = secrets.token_urlsafe(32)
+    result = supabase.table("calendars").update({
+        "guest_link_token": token,
+        "guest_link_role": role,
+        "guest_link_active": True,
+    }).eq("id", calendar_id).execute()
+    return result.data[0], 200
+
+
+@calApp.route("/calendars/<calendar_id>/guest-link", methods=["DELETE"])
+@require_auth
+def revokeGuestLink(calendar_id):
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    # only the owner can revoke a guest link
+    existing = supabase.table("calendars").select("id").eq("id", calendar_id).eq("owner_id", user_id).execute()
+    if not existing.data:
+        abort(404)
+    supabase.table("calendars").update({
+        "guest_link_token": None,
+        "guest_link_role": None,
+        "guest_link_active": False,
+    }).eq("id", calendar_id).execute()
+    return "", 204
+
+
+@calApp.route("/calendars/<calendar_id>/members", methods=["POST"])
+@require_auth
+def addMember(calendar_id):
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    # only the owner can add members
+    existing = supabase.table("calendars").select("*").eq("id", calendar_id).eq("owner_id", user_id).execute()
+    if not existing.data:
+        abort(404)
+    body = request.get_json(silent=True) or {}
+    member_id = body.get("member_id")
+    if not member_id:
+        abort(400, description="member_id is required")
+    calData = existing.data[0]
+    cal = Calendar(name=calData["name"], owner_id=calData["owner_id"])
+    cal.id = calendar_id
+    cal.member_ids = calData["member_ids"]
+    try:
+        cal.add_member(member_id)
+    except Exception as e:
+        abort(400, description=str(e))
+    return {"member_id": member_id}, 201
+
+
+@calApp.route("/calendars/<calendar_id>/members/<member_id>", methods=["DELETE"])
+@require_auth
+def removeMember(calendar_id, member_id):
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    # only the owner can remove members
+    existing = supabase.table("calendars").select("*").eq("id", calendar_id).eq("owner_id", user_id).execute()
+    if not existing.data:
+        abort(404)
+    calData = existing.data[0]
+    cal = Calendar(name=calData["name"], owner_id=calData["owner_id"])
+    cal.id = calendar_id
+    cal.member_ids = calData["member_ids"]
+    try:
+        cal.remove_member(member_id)
+    except KeyError:
+        abort(404)
+    return "", 204
+
+
+@calApp.route("/friends", methods=["GET"])
+@require_auth
+def listFriends():
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    result = supabase.table("users").select("friends").eq("id", user_id).execute()
+    if not result.data:
+        return {"friends": []}
+    friends = result.data[0].get("friends") or []
+    return {"friends": friends}
+
+
+@calApp.route("/friends", methods=["POST"])
+@require_auth
+def addFriend():
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    body = request.get_json(silent=True) or {}
+    friend_id = body.get("friend_id")
+    email = body.get("email")
+    # accept either a friend_id directly or an email to look up
+    if not friend_id and not email:
+        abort(400, description="friend_id or email is required")
+    if email and not friend_id:
+        # look up the user by email so we can get their id
+        lookup = supabase.table("users").select("id").eq("email", email).execute()
+        if not lookup.data:
+            abort(404, description="no user found with that email")
+        friend_id = lookup.data[0]["id"]
+    if friend_id == user_id:
+        abort(400, description="cannot add yourself as a friend")
+    # load the current friends list then append
+    result = supabase.table("users").select("friends").eq("id", user_id).execute()
+    if not result.data:
+        abort(404)
+    friends = result.data[0].get("friends") or []
+    if friend_id in friends:
+        abort(400, description="already friends")
+    friends.append(friend_id)
+    supabase.table("users").update({"friends": friends}).eq("id", user_id).execute()
+    return {"friend_id": friend_id}, 201
+
+
+@calApp.route("/friends/<friend_id>", methods=["DELETE"])
+@require_auth
+def removeFriend(friend_id):
+    supabase = get_supabase_client()
+    user_id = g.user["id"]
+    result = supabase.table("users").select("friends").eq("id", user_id).execute()
+    if not result.data:
+        abort(404)
+    friends = result.data[0].get("friends") or []
+    if friend_id not in friends:
+        abort(404)
+    friends.remove(friend_id)
+    supabase.table("users").update({"friends": friends}).eq("id", user_id).execute()
+    return "", 204
