@@ -46,7 +46,7 @@
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
     <input id="create-description" type="text" placeholder="Description (optional)"
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; grid-column:1/-1;" />
-    <button onclick="submitCreateEvent()" class="btn"
+    <button onclick="addEvent()" class="btn"
             style="border:none; cursor:pointer; margin-top:0; width:max-content;">Create Event</button>
   </div>
 </div>
@@ -95,7 +95,7 @@ function getToken(callback) {
         });
 }
 
-function submitCreateEvent() {
+function addEvent() {
     var calId = document.getElementById('create-calendar-id').value;
     var title = document.getElementById('create-title').value.trim();
     var start = document.getElementById('create-start').value;

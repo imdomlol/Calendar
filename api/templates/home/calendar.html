@@ -209,7 +209,7 @@ function renderDay() {
           <input id="new-ev-end"   class="cal-input" type="datetime-local" value="${dStr}T10:00" />
           <input id="new-ev-desc"  class="cal-input" placeholder="Description (optional)"
                  style="grid-column:1/-1;" />
-          <button class="cal-btn-primary" onclick="createEvent()" style="width:max-content;">Create Event</button>
+          <button class="cal-btn-primary" onclick="addEvent()" style="width:max-content;">Create Event</button>
         </div>
       </div>
     </div>`;
@@ -299,7 +299,7 @@ function deleteEvent(eventId) {
     });
 }
 
-function createEvent() {
+function addEvent() {
     var title = document.getElementById('new-ev-title').value.trim();
     var start = document.getElementById('new-ev-start').value;
     var end   = document.getElementById('new-ev-end').value;
