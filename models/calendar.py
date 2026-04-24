@@ -1,122 +1,100 @@
-# Calendar functions
-'''
-class Calendar:
-    __init__:
-        x
-    to_record:
-        Dictionary: Save a data records of the user, and related credentials.
-    save:
-        Save the calendar to the database.
-    remove_calendar:
-        Opposite of the save function. Remove the calendar (+ Events, member_ids, dates) from the database.
-    add_event:
-        x
-    add_member:
-        Take a member's user_id, and add it to the member_ids list - These users have access to the calendar.
-    remove_member:
-        Opposite of the add function. Remove the member from the list, thus removing access to calendar.
-'''
-
 from utils.supabase_client import get_supabase_client
 from typing import Any
 
-class InvalidUserID(Exception):                         # Custom Error raised for add_member()
-    pass                                                # Invalid ID: Length, Characters, DNE, etc.
-    '''
-    Other custom errors to consider
-        UserNotFound
-        DuplicateID
-        OwnerID
-    '''
+
+class InvalidUserID(Exception):
+    # raised when an invalid user id is passed to add_member
+    pass
+
 
 class Calendar:
-    def __init__(self, name: str, owner_id: str) -> None:
-        self.id = None                                  # Will be set when the calendar is saved to the database. The calendar to save, edit, remove
-        self.name = name                                # The name of the calendar, e.g. "Work Calendar", "Personal Calendar", etc
-        self.owner_id = owner_id                        # The ID of the user who owns the calendar
-        self.member_ids: list[str] = [owner_id]         # A list of IDs of users who have access to the calendar
-        self.events: list[str] = []                     # A list of IDs of events associated with the calendar
-        self.age_timestamp = None                       # Will be set when the calendar is saved to the database
+    def __init__(self, name: str, ownerId: str) -> None:
+        self.id = None              # set when saved to the database
+        self.name = name
+        self.ownerId = ownerId
+        self.memberIds: list[str] = [ownerId]   # owner is always a member
+        self.events: list[str] = []
+        self.ageTimestamp = None    # set when saved to the database
 
     def to_record(self) -> dict[str, Any]:
-        # build the dict to insert into supabase
-        # keys need to match the column names in the calendars table
+        # build a dict with column names matching the calendars table in supabase
+        # omit id and age_timestamp when None so the DB default kicks in
         rec = {
-            "id": self.id,
             "name": self.name,
-            "owner_id": self.owner_id,
-            "member_ids": self.member_ids,
+            "owner_id": self.ownerId,
+            "member_ids": self.memberIds,
             "events": self.events,
-            "age_timestamp": self.age_timestamp,
         }
+        if self.id is not None:
+            rec["id"] = self.id
+        if self.ageTimestamp is not None:
+            rec["age_timestamp"] = self.ageTimestamp
         return rec
 
-
     def save(self) -> Any:
-        supabase = get_supabase_client()
-        return (
-            supabase                                    # Link to the supabase client.
-            .table("calendars")                         # From the database, select 'calendars' to target for insertion.
-            .insert(self.to_record())                   # Insert the calendar data, returns a dictionary of calendar info.
-            .execute()                                  # Perform the actions, otherwise nothing occurs.
-        )
+        # insert this calendar into the database
+        db = get_supabase_client()
+        return db.table("calendars").insert(self.to_record()).execute()
 
-    def remove_calendar(self) -> Any:
-        supabase = get_supabase_client()
-        return (
-            supabase
-            .table("calendars")
-            .delete()                                   # Delete the target, apply filtering to avoid deleting the wrong objects.
-            .eq("id", self.id)                          # "Equals", filter out so the correct calendar id is matched.
-            .execute()
-        )
+    def remove(self) -> Any:
+        # delete this calendar from the database
+        db = get_supabase_client()
+        return db.table("calendars").delete().eq("id", self.id).execute()
 
-    def add_event(self, event_id: str) -> None:
-        self.events.append(event_id)                    # Add an event ID to the calendar's list of events
-    
-    def add_member(self, new_member: str):              # Adds a new member to a calendar class object.
-        if new_member == self.owner_id:                 # Ensure that the ID != owner_id.
-            raise InvalidUserID(": Cannot add owner_id to member list.") # Otherwise raise error
-        if self.id == None:
-            raise ValueError(": self.id does not exist.")
-        if new_member in self.member_ids:               # Ensure that the ID isn't already in the list.
-            print("Heads up!: The member you are trying to add is already in the members list.") # No error, just message.
-            return None                                 # Member is already in the list; no changes made to database, break function - no need for Exception.
-        
-        supabase = get_supabase_client()                # Connect to supabase client.
-        try: # Error handling; Ensure that the member_id exists in the db before proceeding to the append function.
-            response = (                                # Record the return from supabase to a variable, to be used in an if function.
-                supabase
-                .table("users")
-                .select("id")                           # Further select the "id" column from the "users" table.
-                .eq("id", new_member)                   # Check if the "id" column has a value that matches the new_member variable.
-                .execute()
-            )
+    def add_member(self, newMember: str) -> Any:
+        # add a user to this calendar's member list
+        if newMember == self.ownerId:
+            raise InvalidUserID("Cannot add the owner to the member list")
+        if self.id is None:
+            raise ValueError("Calendar must be saved before adding members")
+        if newMember in self.memberIds:
+            # already in the list, nothing to do
+            return None
+
+        # check that the user actually exists in the database
+        db = get_supabase_client()
+        try:
+            result = db.table("users").select("id").eq("id", newMember).execute()
         except Exception as err:
-            raise RuntimeError(f"{err}: Supabase query failed.") # RuntimeError = Common base class for all exceptions
+            raise RuntimeError(f"Supabase query failed: {err}")
 
-        if not response.data: # response.data = [] is returned instead: member_id DNE. Also includes response.error
-            raise ValueError(": member_id does not exist.")
-        
-        self.member_ids.append(new_member)              # No Errors = Append the new member to the member_ids list.
-        return (                                        # Update the Supabase client.
-            supabase                                    
-            .table("calendars")
-            .update({"member_ids":self.member_ids})     # Update the member_ids column with the new member_ids list.
-            .eq("id", self.id)                          # Filter to ensure the correct calendar is updated, via matching the calendar id.
+        if not result.data:
+            raise ValueError("Member id does not exist")
+
+        # add them and save the updated list
+        self.memberIds.append(newMember)
+        return db.table("calendars").update({"member_ids": self.memberIds}).eq("id", self.id).execute()
+
+    def remove_member(self, delMember: str) -> Any:
+        # remove a user from this calendar's member list
+        if delMember not in self.memberIds:
+            raise KeyError("Member not found")
+        db = get_supabase_client()
+        self.memberIds.remove(delMember)
+        return db.table("calendars").update({"member_ids": self.memberIds}).eq("id", self.id).execute()
+
+    @staticmethod
+    def findByGuestToken(token: str) -> dict | None:
+        db = get_supabase_client()
+        result = (
+            db.table("calendars")
+            .select("id, name, owner_id, guest_link_token, guest_link_role, guest_link_active")
+            .eq("guest_link_token", token)
+            .eq("guest_link_active", "true")
+            .limit(1)
             .execute()
         )
+        rows = result.data or []
+        return rows[0] if rows else None
 
-    def remove_member(self, del_member: str):           # Opposite function of the add_member() from above.
-        supabase = get_supabase_client()                # Connect to supabase.
-        if del_member not in self.member_ids:           # Raise error if the member to delete isn't in the member_ids list.
-            raise KeyError("Member not found.")
-        else:                                           # Otherwise, proceed to viciously murder the member_id from the list, no funeral.
-            self.member_ids.remove(del_member)          # Remove the member from the member_ids list.
-            return (
-                supabase
-                .table("calendars")
-                .update({"member_ids": self.member_ids})
-                .eq("id", self.id)
-                .execute()
-            )
+    @staticmethod
+    def listEvents(calendarId: str) -> list:
+        db = get_supabase_client()
+        result = (
+            db.table("events")
+            .select("*")
+            .overlaps("calendar_ids", [str(calendarId)])
+            .order("start_timestamp", desc=False)
+            .execute()
+        )
+        return result.data or []

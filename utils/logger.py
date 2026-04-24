@@ -1,15 +1,19 @@
 import os
 from supabase import create_client
 
+_logger_client = None
+
 
 def _get_logger_client():
-    # use service role key so we can always write logs
-    # the regular SUPABASE_KEY is the anon key which gets blocked by RLS
+    global _logger_client
+    if _logger_client is not None:
+        return _logger_client
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SECRET_API_KEY")
     if not url or not key:
         return None
-    return create_client(url, key)
+    _logger_client = create_client(url, key)
+    return _logger_client
 
 
 # this function logs stuff to the supabase logs table

@@ -34,21 +34,52 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form method="POST"
-                  action="{{ url_for('ui.settings_sync_google', external_id=row.id) }}"
-                  style="margin:0;">
+            <form onsubmit="return pullExternal('{{ row.id }}', this);" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form method="POST"
-                  action="{{ url_for('ui.settings_push_google', external_id=row.id) }}"
-                  style="margin:0;">
+            <form onsubmit="return pushExternal('{{ row.id }}', this);" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
-            <form method="POST"
-                  action="{{ url_for('ui.settings_disconnect_google', external_id=row.id) }}"
-                  style="margin:0;">
-              <button type="submit" class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;">Disconnect</button>
-            </form>
+            <script>
+            async function pullExternal(externalId, form) {
+              try {
+                const resp = await fetch(`/externals/${externalId}/pull`, {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'same-origin',
+                });
+                if (resp.ok) {
+                  location.reload();
+                } else {
+                  const data = await resp.json();
+                  alert('Pull failed: ' + (data.error || resp.status));
+                }
+              } catch (e) {
+                alert('Pull failed: ' + e);
+              }
+              return false;
+            }
+            async function pushExternal(externalId, form) {
+              try {
+                const resp = await fetch(`/externals/${externalId}/push`, {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'same-origin',
+                });
+                if (resp.ok) {
+                  location.reload();
+                } else {
+                  const data = await resp.json();
+                  alert('Push failed: ' + (data.error || resp.status));
+                }
+              } catch (e) {
+                alert('Push failed: ' + e);
+              }
+              return false;
+            }
+            </script>
+            <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
+                    onclick="disconnectExternal('{{ row.id }}')">Disconnect</button>
           </td>
         </tr>
       {% endfor %}
@@ -57,4 +88,41 @@
     {% endif %}
   </table>
 </div>
+<script>
+var SETTINGS_TOKEN = null;
+var _tokenPending = null;
+
+function getToken(callback) {
+    if (SETTINGS_TOKEN) { callback(SETTINGS_TOKEN); return; }
+    if (_tokenPending) {
+        _tokenPending.then(function(t) { if (t) callback(t); });
+        return;
+    }
+    _tokenPending = fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { SETTINGS_TOKEN = d.token; _tokenPending = null; return SETTINGS_TOKEN; })
+        .catch(function(err) {
+            _tokenPending = null;
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
+        });
+    _tokenPending.then(function(t) { if (t) callback(t); });
+}
+
+function disconnectExternal(externalId) {
+    if (!confirm('Disconnect this account?')) return;
+    getToken(function(token) {
+        fetch('/externals/' + externalId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not disconnect.');
+            }
+        });
+    });
+}
+</script>
 {% endblock %}

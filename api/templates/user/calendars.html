@@ -2,25 +2,13 @@
 {% from "macros/ui.html" import status_banner %}
 
 {% block content %}
+
 <div class="hero">
   <h1>Manage Calendars</h1>
-  <p class="muted">Create calendars in Supabase. Owner id is auto-filled from your login.</p>
+  <p class="muted">Create, remove, or adjust guest settings about your calendars.</p>
 </div>
 
 {{ status_banner(status, message) }}
-
-<div class="card" style="margin-bottom:16px;">
-  <h4>Available actions</h4>
-  <p>Create Calendar &bull; Add Member &bull; Remove Member &bull; Manage Events &bull; Remove Calendar &bull; Guest Link Sharing</p>
-  <p class="muted">Logged in as owner id: {{ owner_id }}</p>
-  <form method="POST" action="{{ url_for('ui.create_calendar') }}"
-        style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-    <input type="hidden" name="owner_id" value="{{ owner_id }}" />
-    <input type="text" name="name" placeholder="Calendar name (required)" required
-           style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
-    <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">Create Calendar</button>
-  </form>
-</div>
 
 {% if not has_guest_link_fields %}
   <div class="card banner banner-error">
@@ -30,63 +18,240 @@
   </div>
 {% endif %}
 
-{% if calendars %}
-  <div class="grid">
+
+<div class="grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0; justify-items: center; align-items: stretch;">
+  <!-- Empty calendar card for creation -->
+   <div class="card empty-calendar-card" style="opacity:1; border-style: dashed; border-color: #cbd5e1; min-width: 340px; max-width: 340px; width: 100%; height: 320px; margin: 0; position: relative; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start; background: #f0f4fa;">
+    <!-- Tab navigation -->
+    <div style="margin-bottom:10px; margin-top: 8px;">
+      <div class="tab-nav" style="display:flex; gap:8px;">
+        <button class="tab-btn" onclick="showTab(this, 'info-new')" style="padding:6px 12px; border-radius:8px; border:none; background:#eff6ff; color:#1d4ed8; cursor:pointer;">Info</button>
+        <button class="tab-btn" onclick="showTab(this, 'guest-new')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Guest Link</button>
+        <button class="tab-btn" onclick="showTab(this, 'members-new')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Members</button>
+      </div>
+    </div>
+
+    <!-- Tab content: Info -->
+    <div class="tab-content" id="info-new">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <input id="new-cal-name" type="text" placeholder="Calendar Title" style="padding:12px; border:1px solid #cbd5e1; border-radius:10px; font-size:16px;" />
+        <div style="color:#bdbdbd; font-size:13px; margin-bottom:32px;">
+          <em>Details will appear here after creation.</em>
+        </div>
+        <button onclick="createCalendar()" class="btn" style="position: absolute; bottom: 14px; right: 14px; border:none; cursor:pointer; margin-top:0; padding: 0; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: #1d4ed8; color: white;">
+          +
+        </button>
+      </div>
+    </div>
+    <!-- Tab content: Guest Link -->
+    <div class="tab-content" id="guest-new" style="display:none;">
+      <div class="card" style="background: #e9eef5; min-width: 340px; max-width: 340px; width: 100%; height: 320px; margin: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start;">
+        <em>Guest link options will be available after creation.</em>
+      </div>
+    </div>
+    <!-- Tab content: Members -->
+    <div class="tab-content" id="members-new" style="display:none;">
+      <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+        <label style="font-size:13px; color:#4b5563;">Add Members (comma-separated user IDs):</label>
+        <input id="new-calendar-members" type="text" placeholder="e.g. user1,user2" style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px; width:100%; margin-top:6px;" />
+        <div style="color:#bdbdbd; font-size:13px; margin-top:8px;">
+          <em>Members can be added during creation.</em>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if calendars %}
     {% for cal in calendars %}
-      <div class="card">
-        <div class="pill">Calendar #{{ cal.id }}</div>
-        <h4>{{ cal.name or "Untitled" }}</h4>
-        <p>Owner ID: {{ cal.owner_id }}</p>
-        <p>Events linked: {{ (cal.events or [])|length }}</p>
-        <p><strong>Actions:</strong> Create event, edit event, delete event, manage members, remove calendar</p>
+      <div class="card" style="background: #f7faff; min-width: 320px; max-width: 340px; width: 100%; height: 320px; margin: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-start;">
 
-        <div style="margin: 14px 0; padding-top: 10px; border-top: 1px solid #e5e7eb;">
-          <p><strong>Guest Link Access</strong></p>
-          {% if cal.guest_link_active and cal.guest_link_token %}
-            <p class="muted" style="word-break: break-all;">
-              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
-            </p>
-            <p class="muted">Current role: {{ cal.guest_link_role or 'viewer' }}</p>
+        <div style="position: relative; margin-bottom:10px; min-height: 32px;">
+          <div>
+            <h4 style="margin:0;">{{ cal.name or "Untitled" }}</h4>
+          </div>
+          {% if cal.owner_id == owner_id %}
+          <button onclick="deleteCalendar('{{ cal.id }}', '{{ cal.name or 'this calendar' }}')"
+                  class="btn danger btn-sm" title="Delete"
+                  style="position: absolute; top: 0; right: 0; z-index: 2; background: none; color: #dc2626; border: none; font-size: 22px; padding: 0 8px; line-height: 1; cursor: pointer; box-shadow: none;">
+            &times;
+          </button>
           {% else %}
-            <p class="muted">No active guest link.</p>
-          {% endif %}
-
-          <form method="POST" action="{{ url_for('ui.create_guest_link', calendar_id=cal.id) }}"
-                style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
-            <label for="role-{{ cal.id }}" class="muted">Access role</label>
-            <select id="role-{{ cal.id }}" name="role"
-                    style="padding:8px; border:1px solid #cbd5e1; border-radius:8px;">
-              <option value="viewer">Viewer (read-only)</option>
-              <option value="editor">Editor (anonymous edits)</option>
-            </select>
-            <button type="submit" class="btn" style="border:none; cursor:pointer; margin-top:0;">
-              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
-            </button>
-          </form>
-
-          {% if cal.guest_link_active and cal.guest_link_token %}
-            <form method="POST" action="{{ url_for('ui.revoke_guest_link', calendar_id=cal.id) }}" style="margin-top:8px;">
-              <button type="submit" class="btn danger" style="border:none; cursor:pointer; margin-top:0;">Revoke Link</button>
-            </form>
+          <span class="muted" style="font-size:12px; position: absolute; top: 0; right: 0;">Member</span>
           {% endif %}
         </div>
 
-        <ul>
-          {% if cal.member_ids %}
-            {% for m in cal.member_ids %}
-              <li>{{ m }}</li>
-            {% endfor %}
+        <!-- Tab navigation -->
+        <div style="margin-bottom:10px;">
+          <div class="tab-nav" style="display:flex; gap:8px;">
+            <button class="tab-btn" onclick="showTab(this, 'info-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#eff6ff; color:#1d4ed8; cursor:pointer;">Info</button>
+            <button class="tab-btn" onclick="showTab(this, 'guest-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Guest Link</button>
+            <button class="tab-btn" onclick="showTab(this, 'members-{{ cal.id }}')" style="padding:6px 12px; border-radius:8px; border:none; background:#f3f4f6; color:#4b5563; cursor:pointer;">Members</button>
+          </div>
+        </div>
+
+        <!-- Tab content -->
+        <div class="tab-content" id="info-{{ cal.id }}">
+          <p class="muted" style="font-size:13px;">{{ (cal.events or [])|length }} event(s) linked</p>
+          <p class="muted" style="font-size:12px;">ID: {{ cal.id }}</p>
+        </div>
+        <div class="tab-content" id="guest-{{ cal.id }}" style="display:none;">
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
+              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
+            </p>
+            <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
           {% else %}
-            <li>No members yet</li>
+            <p class="muted" style="font-size:13px;">No active guest link.</p>
           {% endif %}
-        </ul>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+            <select id="role-select-{{ cal.id }}" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </select>
+            <button onclick="generateGuestLink('{{ cal.id }}')" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
+              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
+            </button>
+          </div>
+          {% if cal.guest_link_active and cal.guest_link_token %}
+            <button onclick="revokeGuestLink('{{ cal.id }}')" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:6px;">Revoke Link</button>
+          {% endif %}
+        </div>
+        <div class="tab-content" id="members-{{ cal.id }}" style="display:none;">
+          {% if cal.member_ids and cal.member_ids|length > 0 %}
+            <p style="font-size:13px; margin-bottom:4px;"><strong>Members</strong></p>
+            <ul style="margin:0; padding-left:18px;">
+              {% for m in cal.member_ids %}
+                <li style="font-size:12px; color:#6b7280;">{{ m }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted" style="font-size:13px;">No members yet.</p>
+          {% endif %}
+        </div>
       </div>
     {% endfor %}
-  </div>
-{% else %}
-  <div class="empty">
-    <h3>No calendars found</h3>
-    <p>No calendar rows exist for this owner id yet.</p>
-  </div>
-{% endif %}
+  {% endif %}
+</div>
+
+
+<script>
+var TOKEN = null;
+var _tokenPending = null;
+
+function getToken(callback) {
+    if (TOKEN) { callback(TOKEN); return; }
+    if (_tokenPending) {
+        _tokenPending.then(function(t) { if (t) callback(t); });
+        return;
+    }
+    _tokenPending = fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { TOKEN = d.token; _tokenPending = null; return TOKEN; })
+        .catch(function(err) {
+            _tokenPending = null;
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
+        });
+    _tokenPending.then(function(t) { if (t) callback(t); });
+}
+
+function createCalendar() {
+    var name = document.getElementById('new-cal-name').value.trim();
+    if (!name) {
+        alert('Please enter a calendar name.');
+        return;
+    }
+    getToken(function(token) {
+        fetch('/calendars', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ name: name })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not create calendar.');
+            }
+        });
+    });
+}
+
+function deleteCalendar(calId, calName) {
+    if (!confirm('Delete ' + calName + '? This cannot be undone.')) return;
+    getToken(function(token) {
+        fetch('/calendars/' + calId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not delete calendar.');
+            }
+        });
+    });
+}
+
+function generateGuestLink(calId) {
+    var role = document.getElementById('role-select-' + calId).value;
+    getToken(function(token) {
+        fetch('/calendars/' + calId + '/guest-link', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ role: role })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not generate guest link.');
+            }
+        });
+    });
+}
+
+function revokeGuestLink(calId) {
+    if (!confirm('Revoke this guest link? Anyone using it will lose access.')) return;
+    getToken(function(token) {
+        fetch('/calendars/' + calId + '/guest-link', {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not revoke guest link.');
+            }
+        });
+    });
+}
+
+function showTab(btn, tabId) {
+    var card = btn.closest('.card');
+    var tabs = card.querySelectorAll('.tab-content');
+    tabs.forEach(function(tab) { tab.style.display = 'none'; });
+    var tabBtns = card.querySelectorAll('.tab-btn');
+    tabBtns.forEach(function(b) {
+        b.style.background = '#f3f4f6';
+        b.style.color = '#4b5563';
+    });
+    var activeTab = card.querySelector('#' + tabId);
+    if (activeTab) activeTab.style.display = '';
+    btn.style.background = '#eff6ff';
+    btn.style.color = '#1d4ed8';
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.card').forEach(function(card) {
+        var firstTabBtn = card.querySelector('.tab-btn');
+        if (firstTabBtn) firstTabBtn.click();
+    });
+});
+</script>
+
 {% endblock %}

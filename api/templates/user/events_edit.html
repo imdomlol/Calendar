@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
+
+{% block content %}
+<div class="hero">
+  <h1>Edit Event</h1>
+  <p class="muted">Update the details for this event.</p>
+</div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="max-width:560px;">
+  <div style="display:flex; flex-direction:column; gap:12px;">
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Title</label>
+      <input id="edit-title" type="text" value="{{ event.title or '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Description</label>
+      <input id="edit-description" type="text" value="{{ event.description or '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Start</label>
+      <input id="edit-start" type="datetime-local"
+             value="{{ event.start_timestamp[:16] if event.start_timestamp else '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div>
+      <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">End</label>
+      <input id="edit-end" type="datetime-local"
+             value="{{ event.end_timestamp[:16] if event.end_timestamp else '' }}"
+             style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:4px;">
+      <button onclick="saveEvent('{{ event.id }}')" class="btn" style="border:none; cursor:pointer; margin-top:0;">Save Changes</button>
+      <a href="{{ url_for('ui.manage_events') }}" class="btn" style="background:#6b7280; margin-top:0;">Cancel</a>
+    </div>
+  </div>
+</div>
+
+<script>
+var TOKEN = null;
+var _tokenPending = null;
+
+function getToken(callback) {
+    if (TOKEN) { callback(TOKEN); return; }
+    if (_tokenPending) {
+        _tokenPending.then(function(t) { if (t) callback(t); });
+        return;
+    }
+    _tokenPending = fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { TOKEN = d.token; _tokenPending = null; return TOKEN; })
+        .catch(function(err) {
+            _tokenPending = null;
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
+        });
+    _tokenPending.then(function(t) { if (t) callback(t); });
+}
+
+function saveEvent(eventId) {
+    var title = document.getElementById('edit-title').value.trim();
+    var description = document.getElementById('edit-description').value.trim();
+    var start = document.getElementById('edit-start').value;
+    var end = document.getElementById('edit-end').value;
+    if (!title) {
+        alert('Title cannot be empty.');
+        return;
+    }
+    getToken(function(token) {
+        fetch('/events/' + eventId, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+                title: title,
+                description: description,
+                start_timestamp: start,
+                end_timestamp: end
+            })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.href = '/ui/user/events';
+            } else {
+                alert('Could not save event.');
+            }
+        });
+    });
+}
+</script>
+
+{% endblock %}
