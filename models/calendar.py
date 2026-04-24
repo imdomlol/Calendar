@@ -18,14 +18,17 @@ class Calendar:
 
     def to_record(self) -> dict[str, Any]:
         # build a dict with column names matching the calendars table in supabase
+        # omit id and age_timestamp when None so the DB default kicks in
         rec = {
-            "id": self.id,
             "name": self.name,
             "owner_id": self.ownerId,
             "member_ids": self.memberIds,
             "events": self.events,
-            "age_timestamp": self.ageTimestamp,
         }
+        if self.id is not None:
+            rec["id"] = self.id
+        if self.ageTimestamp is not None:
+            rec["age_timestamp"] = self.ageTimestamp
         return rec
 
     def save(self) -> Any:

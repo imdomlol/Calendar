@@ -23,17 +23,18 @@ class Event:
         self.ageTimestamp: str | None = None
 
     def to_record(self) -> dict[str, Any]:
-        # build a dict with column names matching the events table in supabase
         rec = {
-            "id": self.id,
             "owner_id": self.ownerId,
             "calendar_ids": self.calendarIds,
             "title": self.title,
             "description": self.description,
             "start_timestamp": self.startTimestamp,
             "end_timestamp": self.endTimestamp,
-            "age_timestamp": self.ageTimestamp,
         }
+        if self.id is not None:
+            rec["id"] = self.id
+        if self.ageTimestamp is not None:
+            rec["age_timestamp"] = self.ageTimestamp
         return rec
 
     def save(self) -> Any:

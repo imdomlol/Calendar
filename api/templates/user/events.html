@@ -88,6 +88,10 @@ function getToken(callback) {
         .then(function(data) {
             TOKEN = data.token;
             callback(TOKEN);
+        })
+        .catch(function(err) {
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
         });
 }
 

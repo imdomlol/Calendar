@@ -247,7 +247,11 @@ function getToken(callback) {
     if (TOKEN) { callback(TOKEN); return; }
     fetch('/ui/me/token')
         .then(function(r) { return r.json(); })
-        .then(function(d) { TOKEN = d.token; callback(TOKEN); });
+        .then(function(d) { TOKEN = d.token; callback(TOKEN); })
+        .catch(function(err) {
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
+        });
 }
 
 function saveEvent(eventId) {
