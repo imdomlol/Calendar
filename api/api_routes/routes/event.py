@@ -31,10 +31,8 @@ def createEvent():
     if not any(cid in userCalIds for cid in calendarIds):
         abort(403)
 
-    db = get_supabase_client()
     event = Event(
         title=title,
-        supabaseClient=db,
         calendarIds=calendarIds,
         ownerId=user.userId,
         description=body.get("description"),
@@ -109,7 +107,6 @@ def editEvent(event_id):
 
     event = Event(
         title=eventData["title"],
-        supabaseClient=db,
         calendarIds=eventData["calendar_ids"],
         ownerId=eventData["owner_id"],
     )
@@ -132,9 +129,12 @@ def removeEvent(event_id):
     if not result.data:
         abort(404)
     eventData = result.data[0]
+    user = makeUser()
+    userCalIds = [cal["id"] for cal in user.listCalendars()]
+    if not any(cid in userCalIds for cid in eventData.get("calendar_ids", [])):
+        abort(403)
     event = Event(
         title=eventData["title"],
-        supabaseClient=db,
         calendarIds=eventData["calendar_ids"],
     )
     event.id = event_id

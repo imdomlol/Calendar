@@ -58,12 +58,17 @@ def deleteExternal(external_id):
 @api_bp.route("/externals/<external_id>/pull", methods=["POST"])
 @require_auth
 def pullExternalData(external_id):
+    user = makeUser()
     db = get_supabase_client()
+    ownership = db.table("externals").select("id").eq("id", external_id).eq("user_id", user.userId).execute()
+    if not ownership.data:
+        abort(404)
     ext = External(
         id=external_id,
         url="",
         provider="",
         supabaseClient=db,
+        userId=user.userId,
     )
     try:
         data = ext.pullCalData(external_id)
@@ -75,12 +80,17 @@ def pullExternalData(external_id):
 @api_bp.route("/externals/<external_id>/push", methods=["POST"])
 @require_auth
 def pushExternalData(external_id):
+    user = makeUser()
     db = get_supabase_client()
+    ownership = db.table("externals").select("id").eq("id", external_id).eq("user_id", user.userId).execute()
+    if not ownership.data:
+        abort(404)
     ext = External(
         id=external_id,
         url="",
         provider="",
         supabaseClient=db,
+        userId=user.userId,
     )
     try:
         data = ext.pushCalData(external_id)

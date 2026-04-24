@@ -17,35 +17,31 @@ class User(Guest):
     # -------------------------
 
     def listCalendars(self) -> list:
-        # get all calendars this user owns or is a member of
+        # get all calendars this user owns or is a member of in a single query
         db = get_supabase_client()
-        owned = db.table("calendars").select("*").eq("owner_id", self.userId).execute()
-        member = db.table("calendars").select("*").contains("member_ids", [self.userId]).execute()
-        # combine and deduplicate by id
-        allCals = []
-        seenIds = []
-        for c in (owned.data or []):
-            allCals.append(c)
-            seenIds.append(c["id"])
-        for c in (member.data or []):
-            if c["id"] not in seenIds:
-                allCals.append(c)
-        return allCals
+        result = db.table("calendars").select("*").or_(
+            f"owner_id.eq.{self.userId},member_ids.cs.{{{self.userId}}}"
+        ).execute()
+        return result.data or []
 
     # -------------------------
     # Event stuff
     # -------------------------
 
     def listEvents(self) -> list:
-        # get all events that belong to any of this user's calendars
+        # get all events across the user's calendars in 2 queries instead of 3
         db = get_supabase_client()
-        calIds = [c["id"] for c in self.listCalendars()]
+        cal_result = db.table("calendars").select("id").or_(
+            f"owner_id.eq.{self.userId},member_ids.cs.{{{self.userId}}}"
+        ).execute()
+        calIds = [c["id"] for c in (cal_result.data or [])]
         if not calIds:
             return []
         result = db.table("events").select("*").overlaps("calendar_ids", calIds).execute()
         return result.data or []
 
-    def listEventsForCalendar(self, calendarId: str) -> list:
+    @staticmethod
+    def listEventsForCalendar(calendarId: str) -> list:
         from models.calendar import Calendar
         return Calendar.listEvents(calendarId)
 

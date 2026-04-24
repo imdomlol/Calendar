@@ -50,7 +50,7 @@ def settings_page():
 @ui_bp.route("/settings/external/google/connect", methods=["GET", "POST"])
 @ui_login_required
 def settings_connect_google():
-    return redirect(url_for("ui.settings_login_google"))
+    return settings_login_google()
 
 
 @ui_bp.route("/settings/external/google/login")
@@ -120,12 +120,8 @@ def settings_google_callback():
 
         uid = _ui_user()["id"]
         provider_url = "https://www.googleapis.com/calendar/v3"
-        u = _make_ui_user()
-        existing = next(
-            (e for e in u.listExternals()
-             if e.get("provider") == "google" and e.get("url") == provider_url),
-            None,
-        )
+        existing_result = get_supabase_client().table("externals").select("*").eq("user_id", uid).eq("provider", "google").eq("url", provider_url).limit(1).execute()
+        existing = existing_result.data[0] if existing_result.data else None
 
         db = get_supabase_client()
         if existing:

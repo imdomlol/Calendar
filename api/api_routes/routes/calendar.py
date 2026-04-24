@@ -58,6 +58,8 @@ def addMember(calendar_id):
     if not result.data:
         abort(404, description="Calendar not found")
     calData = result.data[0]
+    if calData["owner_id"] != g.user["id"]:
+        abort(403)
     cal = Calendar(name=calData["name"], ownerId=calData["owner_id"])
     cal.id = calendar_id
     cal.memberIds = calData["member_ids"]
@@ -82,6 +84,8 @@ def removeMember(calendar_id, member_id):
     if not result.data:
         abort(404, description="Calendar not found")
     calData = result.data[0]
+    if calData["owner_id"] != g.user["id"]:
+        abort(403)
     cal = Calendar(name=calData["name"], ownerId=calData["owner_id"])
     cal.id = calendar_id
     cal.memberIds = calData["member_ids"]

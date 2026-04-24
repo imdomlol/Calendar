@@ -5,28 +5,27 @@ from typing import Any
 class Guest:
     # Guest users access the app through a guest link, no login required
 
-    def viewCalendar(self, calendarId: str) -> Any:
-        # look up a calendar by id and return it
+    @staticmethod
+    def viewCalendar(calendarId: str) -> Any:
         db = get_supabase_client()
         result = db.table("calendars").select("*").eq("id", calendarId).execute()
         return result.data
 
-    def viewEvent(self, eventId: str) -> Any:
-        # look up a single event by id and return it
+    @staticmethod
+    def viewEvent(eventId: str) -> Any:
         db = get_supabase_client()
         result = db.table("events").select("*").eq("id", eventId).execute()
         return result.data
 
-    def editCalendar(self, calendarId: str, name: str) -> Any:
-        # guests with edit access can update the calendar name
+    @staticmethod
+    def editCalendar(calendarId: str, name: str) -> Any:
         db = get_supabase_client()
         result = db.table("calendars").update({"name": name}).eq("id", calendarId).execute()
         return result.data
 
-    def editEvent(self, eventId: str, title: str | None = None, description: str | None = None, startTimestamp: str | None = None, endTimestamp: str | None = None) -> Any:
-        # guests with edit access can update event fields
+    @staticmethod
+    def editEvent(eventId: str, title: str | None = None, description: str | None = None, startTimestamp: str | None = None, endTimestamp: str | None = None) -> Any:
         db = get_supabase_client()
-        # build the update dict with only the fields that were actually given
         updates = {}
         if title is not None:
             updates["title"] = title
@@ -39,4 +38,4 @@ class Guest:
         if len(updates) == 0:
             return []
         result = db.table("events").update(updates).eq("id", eventId).execute()
-        return result.data
+        return result.data or []

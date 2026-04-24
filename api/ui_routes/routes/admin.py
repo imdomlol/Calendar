@@ -102,9 +102,7 @@ def send_notification():
 @ui_bp.route("/admin/suspend")
 @ui_admin_required
 def suspend_user():
-    navData = admin_nav() #admin nav
-    # render the suspend user page
-    return render_page("Suspend User", "admin", navData, "admin/suspend.html")
+    return render_page("Suspend User", "admin", admin_nav(), "admin/suspend.html")
 
 @ui_bp.route("/admin/unlink")
 @ui_admin_required

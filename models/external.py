@@ -123,31 +123,34 @@ class External:
         if provider == "google":
             # get all calendars this user owns except the synced one
             cals = db.table("calendars").select("id").eq("owner_id", userId).neq("name", "Google Calendar (Synced)").execute()
-            calIds = []
-            for c in (cals.data or []):
-                calIds.append(c["id"])
+            calIds = [c["id"] for c in (cals.data or [])]
             if not calIds:
                 return {"pushed": 0}
-
-            events = db.table("events").select("title, description, start_timestamp, end_timestamp, calendar_ids").overlaps("calendar_ids", calIds).execute()
-            localEvents = events.data or []
 
             apiUrl = f"{url}/calendars/primary/events"
             headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
             pushed = 0
-            for e in localEvents:
-                start = e.get("start_timestamp")
-                end = e.get("end_timestamp") or start
-                body = {
-                    "summary": e.get("title") or "Untitled Event",
-                    "start": {"dateTime": start},
-                    "end": {"dateTime": end},
-                }
-                if e.get("description"):
-                    body["description"] = e["description"]
-                resp = requests.post(apiUrl, headers=headers, json=body)
-                if resp.status_code in (200, 201):
-                    pushed += 1
+            chunk_size = 200
+            offset = 0
+            while True:
+                chunk = db.table("events").select("title, description, start_timestamp, end_timestamp, calendar_ids").overlaps("calendar_ids", calIds).range(offset, offset + chunk_size - 1).execute()
+                localEvents = chunk.data or []
+                for e in localEvents:
+                    start = e.get("start_timestamp")
+                    end = e.get("end_timestamp") or start
+                    body = {
+                        "summary": e.get("title") or "Untitled Event",
+                        "start": {"dateTime": start},
+                        "end": {"dateTime": end},
+                    }
+                    if e.get("description"):
+                        body["description"] = e["description"]
+                    resp = requests.post(apiUrl, headers=headers, json=body)
+                    if resp.status_code in (200, 201):
+                        pushed += 1
+                if len(localEvents) < chunk_size:
+                    break
+                offset += chunk_size
             return {"pushed": pushed}
 
         elif provider == "outlook":
