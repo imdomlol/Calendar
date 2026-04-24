@@ -282,6 +282,18 @@ def render_page(title, role, nav, template, **ctx):
 
 
 
+from models.user import User
+
+
+def _make_ui_user() -> User:
+    usr = _ui_user()
+    return User(
+        userId=usr["id"],
+        displayName=usr.get("display_name", ""),
+        email=usr.get("email", ""),
+    )
+
+
 from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular import
 
 

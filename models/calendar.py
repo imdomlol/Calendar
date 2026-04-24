@@ -69,3 +69,29 @@ class Calendar:
         db = get_supabase_client()
         self.memberIds.remove(delMember)
         return db.table("calendars").update({"member_ids": self.memberIds}).eq("id", self.id).execute()
+
+    @staticmethod
+    def findByGuestToken(token: str) -> dict | None:
+        db = get_supabase_client()
+        result = (
+            db.table("calendars")
+            .select("id, name, owner_id, guest_link_token, guest_link_role, guest_link_active")
+            .eq("guest_link_token", token)
+            .eq("guest_link_active", "true")
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else None
+
+    @staticmethod
+    def listEvents(calendarId: str) -> list:
+        db = get_supabase_client()
+        result = (
+            db.table("events")
+            .select("*")
+            .overlaps("calendar_ids", [str(calendarId)])
+            .order("start_timestamp", desc=False)
+            .execute()
+        )
+        return result.data or []

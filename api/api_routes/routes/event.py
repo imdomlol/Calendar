@@ -1,20 +1,19 @@
-from flask import Blueprint, abort, request
+from flask import abort, request
+from api.api_routes import api_bp
+from api.api_routes.helpers import makeUser
 from models.event import Event
 from utils.auth import require_auth
-from utils.request_helpers import makeUser
 from utils.supabase_client import get_supabase_client
 
-event_bp = Blueprint("event", __name__)
 
-
-@event_bp.route("/events", methods=["GET"])
+@api_bp.route("/events", methods=["GET"])
 @require_auth
 def listEvents():
     user = makeUser()
     return {"events": user.listEvents()}
 
 
-@event_bp.route("/events", methods=["POST"])
+@api_bp.route("/events", methods=["POST"])
 @require_auth
 def createEvent():
     body = request.get_json(silent=True) or {}
@@ -27,8 +26,7 @@ def createEvent():
         abort(400, description="title and calendar_ids are required")
 
     user = makeUser()
-    userCals = user.listCalendars()
-    userCalIds = [cal["id"] for cal in userCals]
+    userCalIds = [cal["id"] for cal in user.listCalendars()]
 
     if not any(cid in userCalIds for cid in calendarIds):
         abort(403)
@@ -47,7 +45,7 @@ def createEvent():
     return result.data[0], 201
 
 
-@event_bp.route("/events/bulk", methods=["POST"])
+@api_bp.route("/events/bulk", methods=["POST"])
 @require_auth
 def createEventsBulk():
     body = request.get_json(silent=True) or {}
@@ -83,7 +81,7 @@ def createEventsBulk():
     return {"created": len(result.data or [])}, 201
 
 
-@event_bp.route("/events/<event_id>", methods=["PUT"])
+@api_bp.route("/events/<event_id>", methods=["PUT"])
 @require_auth
 def editEvent(event_id):
     db = get_supabase_client()
@@ -126,7 +124,7 @@ def editEvent(event_id):
     return editResult.data[0], 200
 
 
-@event_bp.route("/events/<event_id>", methods=["DELETE"])
+@api_bp.route("/events/<event_id>", methods=["DELETE"])
 @require_auth
 def removeEvent(event_id):
     db = get_supabase_client()

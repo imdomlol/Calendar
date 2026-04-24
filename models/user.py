@@ -39,13 +39,15 @@ class User(Guest):
     def listEvents(self) -> list:
         # get all events that belong to any of this user's calendars
         db = get_supabase_client()
-        calIds = []
-        for c in self.listCalendars():
-            calIds.append(c["id"])
-        if len(calIds) == 0:
+        calIds = [c["id"] for c in self.listCalendars()]
+        if not calIds:
             return []
         result = db.table("events").select("*").overlaps("calendar_ids", calIds).execute()
         return result.data or []
+
+    def listEventsForCalendar(self, calendarId: str) -> list:
+        from models.calendar import Calendar
+        return Calendar.listEvents(calendarId)
 
     # -------------------------
     # External calendar stuff
@@ -62,12 +64,21 @@ class User(Guest):
     # -------------------------
 
     def listFriends(self) -> list:
-        # get the friends list from the database
+        # get the friends list (IDs) from the database
         db = get_supabase_client()
         result = db.table("users").select("friends").eq("id", self.userId).execute()
         if not result.data:
             return []
         return result.data[0].get("friends") or []
+
+    def listFriendsData(self) -> list:
+        # resolve friend IDs to full user records
+        friendIds = self.listFriends()
+        if not friendIds:
+            return []
+        db = get_supabase_client()
+        result = db.table("users").select("id, email, display_name").in_("id", friendIds).execute()
+        return result.data or []
 
     def addFriend(self, friendId: str = None, email: str = None) -> list:
         # if no friendId given but email is, look up the user by email

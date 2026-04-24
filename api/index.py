@@ -4,13 +4,9 @@ from flask import request
 from flask_cors import CORS
 from supabase import create_client
 
+from api.api_routes import api_bp
 from api.auth_routes import auth_bp
-from api.calendar_routes import calendar_bp
-from api.event_routes import event_bp
-from api.external_routes import external_bp
-from api.guest_routes import guest_bp
 from api.ui_routes import ui_bp
-from api.user_routes import user_bp
 from utils.logger import logEvent
 
 app = Flask(__name__)
@@ -23,11 +19,7 @@ supabase = supabaseClient
 CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
 
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
-app.register_blueprint(calendar_bp)
-app.register_blueprint(event_bp)
-app.register_blueprint(external_bp)
-app.register_blueprint(guest_bp)
-app.register_blueprint(user_bp)
+app.register_blueprint(api_bp)
 app.register_blueprint(ui_bp, url_prefix="/ui")
 
 

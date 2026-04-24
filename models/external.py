@@ -38,6 +38,16 @@ class External:
         record = self.to_record()
         return self.supabaseClient.table("externals").insert(record).execute()
 
+    def updateTokens(self, externalId: str, userId: str, accessToken: str = None, refreshToken: str = None) -> Any:
+        db = self.supabaseClient
+        updateData = {}
+        if accessToken:
+            updateData["access_token"] = accessToken
+        if refreshToken:
+            updateData["refresh_token"] = refreshToken
+        if updateData:
+            db.table("externals").update(updateData).eq("id", externalId).eq("user_id", userId).execute()
+
     def remove(self, externalId: str) -> Any:
         # delete this external connection, but only if it belongs to this user
         db = self.supabaseClient

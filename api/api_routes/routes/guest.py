@@ -1,7 +1,6 @@
-from flask import Blueprint, abort, request
+from flask import abort, request
+from api.api_routes import api_bp
 from utils.supabase_client import get_supabase_client
-
-guest_bp = Blueprint("guest", __name__)
 
 
 def _get_guest_editor_calendar(token):
@@ -22,7 +21,7 @@ def _get_guest_editor_calendar(token):
     return cal
 
 
-@guest_bp.route("/guest/<token>/events", methods=["POST"])
+@api_bp.route("/guest/<token>/events", methods=["POST"])
 def guestCreateEvent(token):
     cal = _get_guest_editor_calendar(token)
     if not cal:
@@ -44,7 +43,7 @@ def guestCreateEvent(token):
     return result.data[0], 201
 
 
-@guest_bp.route("/guest/<token>/events/<event_id>", methods=["PUT"])
+@api_bp.route("/guest/<token>/events/<event_id>", methods=["PUT"])
 def guestEditEvent(token, event_id):
     cal = _get_guest_editor_calendar(token)
     if not cal:
@@ -74,7 +73,7 @@ def guestEditEvent(token, event_id):
     return result.data[0], 200
 
 
-@guest_bp.route("/guest/<token>/events/<event_id>", methods=["DELETE"])
+@api_bp.route("/guest/<token>/events/<event_id>", methods=["DELETE"])
 def guestDeleteEvent(token, event_id):
     cal = _get_guest_editor_calendar(token)
     if not cal:

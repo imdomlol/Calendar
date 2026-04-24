@@ -1,21 +1,20 @@
 import secrets
-from flask import Blueprint, abort, g, request
+from flask import abort, g, request
+from api.api_routes import api_bp
+from api.api_routes.helpers import makeUser
 from models.calendar import Calendar
 from utils.auth import require_auth
-from utils.request_helpers import makeUser
 from utils.supabase_client import get_supabase_client
 
-calendar_bp = Blueprint("calendar", __name__)
 
-
-@calendar_bp.route("/calendars", methods=["GET"])
+@api_bp.route("/calendars", methods=["GET"])
 @require_auth
 def listCalendars():
     user = makeUser()
     return {"calendars": user.listCalendars()}
 
 
-@calendar_bp.route("/calendars", methods=["POST"])
+@api_bp.route("/calendars", methods=["POST"])
 @require_auth
 def createCalendar():
     body = request.get_json(silent=True) or {}
@@ -28,7 +27,7 @@ def createCalendar():
     return result.data[0], 201
 
 
-@calendar_bp.route("/calendars/<calendar_id>", methods=["DELETE"])
+@api_bp.route("/calendars/<calendar_id>", methods=["DELETE"])
 @require_auth
 def deleteCalendar(calendar_id):
     db = get_supabase_client()
@@ -43,7 +42,7 @@ def deleteCalendar(calendar_id):
     return "", 204
 
 
-@calendar_bp.route("/calendars/<calendar_id>/members", methods=["POST"])
+@api_bp.route("/calendars/<calendar_id>/members", methods=["POST"])
 @require_auth
 def addMember(calendar_id):
     body = request.get_json(silent=True) or {}
@@ -75,7 +74,7 @@ def addMember(calendar_id):
     return {"added": added, "errors": errors}, 201
 
 
-@calendar_bp.route("/calendars/<calendar_id>/members/<member_id>", methods=["DELETE"])
+@api_bp.route("/calendars/<calendar_id>/members/<member_id>", methods=["DELETE"])
 @require_auth
 def removeMember(calendar_id, member_id):
     db = get_supabase_client()
@@ -93,7 +92,7 @@ def removeMember(calendar_id, member_id):
     return "", 204
 
 
-@calendar_bp.route("/calendars/<calendar_id>/guest-link", methods=["POST"])
+@api_bp.route("/calendars/<calendar_id>/guest-link", methods=["POST"])
 @require_auth
 def createGuestLink(calendar_id):
     db = get_supabase_client()
@@ -114,7 +113,7 @@ def createGuestLink(calendar_id):
     return result.data[0], 200
 
 
-@calendar_bp.route("/calendars/<calendar_id>/guest-link", methods=["DELETE"])
+@api_bp.route("/calendars/<calendar_id>/guest-link", methods=["DELETE"])
 @require_auth
 def revokeGuestLink(calendar_id):
     db = get_supabase_client()

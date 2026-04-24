@@ -1,20 +1,19 @@
-from flask import Blueprint, abort, request
+from flask import abort, request
+from api.api_routes import api_bp
+from api.api_routes.helpers import makeUser
 from models.external import External
 from utils.auth import require_auth
-from utils.request_helpers import makeUser
 from utils.supabase_client import get_supabase_client
 
-external_bp = Blueprint("external", __name__)
 
-
-@external_bp.route("/externals", methods=["GET"])
+@api_bp.route("/externals", methods=["GET"])
 @require_auth
 def listExternals():
     user = makeUser()
     return {"externals": user.listExternals()}
 
 
-@external_bp.route("/externals", methods=["POST"])
+@api_bp.route("/externals", methods=["POST"])
 @require_auth
 def createExternal():
     body = request.get_json(silent=True) or {}
@@ -37,7 +36,7 @@ def createExternal():
     return result.data[0], 201
 
 
-@external_bp.route("/externals/<external_id>", methods=["DELETE"])
+@api_bp.route("/externals/<external_id>", methods=["DELETE"])
 @require_auth
 def deleteExternal(external_id):
     user = makeUser()
@@ -56,7 +55,7 @@ def deleteExternal(external_id):
     return "", 204
 
 
-@external_bp.route("/externals/<external_id>/pull", methods=["POST"])
+@api_bp.route("/externals/<external_id>/pull", methods=["POST"])
 @require_auth
 def pullExternalData(external_id):
     db = get_supabase_client()
@@ -73,7 +72,7 @@ def pullExternalData(external_id):
     return {"data": data}, 200
 
 
-@external_bp.route("/externals/<external_id>/push", methods=["POST"])
+@api_bp.route("/externals/<external_id>/push", methods=["POST"])
 @require_auth
 def pushExternalData(external_id):
     db = get_supabase_client()

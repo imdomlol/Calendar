@@ -1,11 +1,10 @@
-from flask import Blueprint, abort, g, request
+from flask import abort, g, request
+from api.api_routes import api_bp
+from api.api_routes.helpers import makeUser
 from utils.auth import require_auth
-from utils.request_helpers import makeUser
-
-user_bp = Blueprint("user", __name__)
 
 
-@user_bp.route("/me", methods=["GET"])
+@api_bp.route("/me", methods=["GET"])
 @require_auth
 def getMe():
     user = getattr(g, "user", {})
@@ -18,7 +17,7 @@ def getMe():
     }, 200
 
 
-@user_bp.route("/me", methods=["DELETE"])
+@api_bp.route("/me", methods=["DELETE"])
 @require_auth
 def deleteMe():
     user = makeUser()
@@ -26,14 +25,14 @@ def deleteMe():
     return "", 204
 
 
-@user_bp.route("/friends", methods=["GET"])
+@api_bp.route("/friends", methods=["GET"])
 @require_auth
 def listFriends():
     user = makeUser()
     return {"friends": user.listFriends()}
 
 
-@user_bp.route("/friends", methods=["POST"])
+@api_bp.route("/friends", methods=["POST"])
 @require_auth
 def addFriend():
     body = request.get_json(silent=True) or {}
@@ -47,7 +46,7 @@ def addFriend():
     return {"friends": friends}
 
 
-@user_bp.route("/friends/<friend_id>", methods=["DELETE"])
+@api_bp.route("/friends/<friend_id>", methods=["DELETE"])
 @require_auth
 def removeFriend(friend_id):
     user = makeUser()
