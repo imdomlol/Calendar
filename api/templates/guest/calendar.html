@@ -67,7 +67,6 @@ function loadState()  {
     if (s && s.year) state = s;
   } catch(e) {}
 }
-document.addEventListener('submit', saveState);
 
 /* ── helpers ────────────────────────────────────────────────── */
 function p2(n) { return String(n).padStart(2,'0'); }
@@ -80,6 +79,58 @@ function esc(s) {
                       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escA(s) { return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+/* ── fetch helpers ──────────────────────────────────────────── */
+function createGuestEvent() {
+    var title = document.getElementById('new-ev-title').value.trim();
+    var start = document.getElementById('new-ev-start').value;
+    var end   = document.getElementById('new-ev-end').value;
+    var desc  = document.getElementById('new-ev-desc').value.trim();
+    if (!title) { alert('Title is required.'); return; }
+    fetch('/guest/' + TOKEN + '/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: title,
+            start_timestamp: start || null,
+            end_timestamp: end || null,
+            description: desc || null
+        })
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not create event.'); }
+    });
+}
+
+function editGuestEvent(eventId) {
+    var title = document.getElementById('edit-title-' + eventId).value.trim();
+    var start = document.getElementById('edit-start-' + eventId).value;
+    var end   = document.getElementById('edit-end-'   + eventId).value;
+    var desc  = document.getElementById('edit-desc-'  + eventId).value.trim();
+    fetch('/guest/' + TOKEN + '/events/' + eventId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: title || null,
+            start_timestamp: start || null,
+            end_timestamp: end || null,
+            description: desc || null
+        })
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not save event.'); }
+    });
+}
+
+function deleteGuestEvent(eventId) {
+    if (!confirm('Delete this event?')) return;
+    fetch('/guest/' + TOKEN + '/events/' + eventId, {
+        method: 'DELETE'
+    }).then(function(r) {
+        if (r.ok) { window.location.reload(); }
+        else { alert('Could not delete event.'); }
+    });
+}
 
 /* ── month view ─────────────────────────────────────────────── */
 function renderMonth() {
@@ -168,22 +219,18 @@ function renderDay() {
 
           ${CAN_EDIT ? `
           <div id="edit-${ev.id}" style="display:none; margin-top:12px; padding-top:12px; border-top:1px solid #f1f5f9;">
-            <form method="POST" action="/ui/guest/${TOKEN}/events/${ev.id}/edit"
-                  style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-              <input class="cal-input" name="title" value="${escA(ev.title||'')}" placeholder="Title" required
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <input id="edit-title-${ev.id}" class="cal-input" value="${escA(ev.title||'')}" placeholder="Title"
                      style="grid-column:1/-1;" />
-              <input class="cal-input" type="datetime-local" name="start_timestamp" value="${svStart}" />
-              <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${svEnd}" />
-              <input class="cal-input" name="description" value="${escA(ev.description||'')}"
+              <input id="edit-start-${ev.id}" class="cal-input" type="datetime-local" value="${svStart}" />
+              <input id="edit-end-${ev.id}" class="cal-input" type="datetime-local" value="${svEnd}" />
+              <input id="edit-desc-${ev.id}" class="cal-input" value="${escA(ev.description||'')}"
                      placeholder="Description" style="grid-column:1/-1;" />
               <div style="display:flex; gap:8px; grid-column:1/-1;">
-                <button type="submit" class="cal-btn-primary">Save</button>
-                <form method="POST" action="/ui/guest/${TOKEN}/events/${ev.id}/delete" style="display:inline;">
-                  <button type="submit" class="cal-btn-danger"
-                          onclick="return confirm('Delete this event?')">Delete</button>
-                </form>
+                <button class="cal-btn-primary" onclick="editGuestEvent('${ev.id}')">Save</button>
+                <button class="cal-btn-danger" onclick="deleteGuestEvent('${ev.id}')">Delete</button>
               </div>
-            </form>
+            </div>
           </div>` : ''}
         </div>`;
     });
@@ -194,16 +241,15 @@ function renderDay() {
     addForm = `
       <div style="border-top:1px solid #f1f5f9; padding-top:16px; margin-top:8px;">
         <h4 style="margin:0 0 10px; font-size:.95rem; color:#475569;">Add Event</h4>
-        <form method="POST" action="/ui/guest/${TOKEN}/events/create"
-              style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <input class="cal-input" name="title" placeholder="Event title" required
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <input id="new-ev-title" class="cal-input" placeholder="Event title"
                  style="grid-column:1/-1;" />
-          <input class="cal-input" type="datetime-local" name="start_timestamp" value="${dStr}T09:00" />
-          <input class="cal-input" type="datetime-local" name="end_timestamp"   value="${dStr}T10:00" />
-          <input class="cal-input" name="description" placeholder="Description (optional)"
+          <input id="new-ev-start" class="cal-input" type="datetime-local" value="${dStr}T09:00" />
+          <input id="new-ev-end" class="cal-input" type="datetime-local" value="${dStr}T10:00" />
+          <input id="new-ev-desc" class="cal-input" placeholder="Description (optional)"
                  style="grid-column:1/-1;" />
-          <button type="submit" class="cal-btn-primary" style="width:max-content;">Create Event</button>
-        </form>
+          <button class="cal-btn-primary" onclick="createGuestEvent()" style="width:max-content;">Create Event</button>
+        </div>
       </div>`;
   }
 

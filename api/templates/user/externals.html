@@ -1,25 +1,34 @@
 {% extends "base.html" %}
+{% from "macros/ui.html" import status_banner %}
 
 {% block content %}
 <div class="hero">
-  <h1>Manage Externals</h1>
-  <p class="muted">Connect, disconnect, sync now, or toggle auto-sync.</p>
+  <h1>External Connections</h1>
+  <p class="muted">External calendars connected to your account.</p>
 </div>
-<div class="grid">
-  <div class="card">
-    <h4>Connected providers</h4>
-    <ul>
-      {% for name in providers %}
-        <li>{{ name }}</li>
-      {% endfor %}
-    </ul>
-  </div>
-  <div class="card">
-    <h4>Actions</h4>
-    <p>Connect external calendar</p>
-    <p>Disconnect external calendar</p>
-    <p>Sync now</p>
-    <p>Enable/Disable auto sync</p>
-  </div>
+
+{{ status_banner(status, message) }}
+
+<div class="card" style="margin-bottom:16px;">
+  <p>To connect, disconnect, or sync an external calendar go to
+    <a href="{{ url_for('ui.settings_page') }}">Settings</a>.
+  </p>
 </div>
+
+{% if providers %}
+  <div class="grid">
+    {% for p in providers %}
+      <div class="card">
+        <div class="pill" style="margin-bottom:6px;">{{ p.provider or "Unknown" }}</div>
+        <p class="muted" style="font-size:12px; word-break:break-all;">{{ p.url or "No URL" }}</p>
+        <p class="muted" style="font-size:12px;">Connection ID: {{ p.id }}</p>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <h3>No external connections</h3>
+    <p>You haven't connected any external calendars yet.</p>
+  </div>
+{% endif %}
 {% endblock %}

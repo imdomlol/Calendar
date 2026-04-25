@@ -1,5 +1,4 @@
-import json
-from urllib import request
+import requests
 from typing import Any
 
 
@@ -7,61 +6,154 @@ class External:
     def __init__(
         self,
         id: str | None,
-        owner_id: str,
         url: str,
         provider: str,
-        supabase_client: Any,
-        user_id: str | None = None,
-        access_token: str | None = None,
-        refresh_token: str | None = None,
+        supabaseClient: Any,
+        userId: str | None = None,
+        accessToken: str | None = None,
+        refreshToken: str | None = None,
     ) -> None:
         self.id = id
-        self.owner_id = owner_id
         self.url = url
         self.provider = provider
-        self.user_id = user_id
-        self.access_token = access_token
-        self.refresh_token = refresh_token
-        self.supabase_client = supabase_client
+        self.userId = userId
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.supabaseClient = supabaseClient
 
     def to_record(self) -> dict[str, Any]:
-        # this builds a dict of all the fields on this object
-        # we need this when saving to the database
-        # the keys have to match the column names in the externals table
+        # build a dict with column names matching the externals table in supabase
         rec = {
-            "id": self.id, #the id of this external
-            "owner_id": self.owner_id,
+            "id": self.id,
             "url": self.url,
             "provider": self.provider,
-            "user_id": self.user_id,
-            "access_token": self.access_token,
-            "refresh_token": self.refresh_token,
+            "user_id": self.userId,
+            "access_token": self.accessToken,
+            "refresh_token": self.refreshToken,
         }
-        # return the dict so the caller can use it
         return rec
 
-
     def save(self) -> Any:
-        record = self.to_record() #get the record dict first
-        return self.supabase_client.table("externals").insert(record).execute()
+        # insert this external connection into the database
+        record = self.to_record()
+        return self.supabaseClient.table("externals").insert(record).execute()
 
-    def request_json(
-        self,
-        method: str,
-        path: str,
-        payload: dict[str, Any] | None = None,
-    ) -> Any:
-        hdrs = {"Content-Type": "application/json"}
-        # add the auth header if we have a token stored
-        if self.access_token is not None and len(self.access_token) > 0:
-            hdrs["Authorization"] = f"Bearer {self.access_token}"
+    def updateTokens(self, externalId: str, userId: str, accessToken: str = None, refreshToken: str = None) -> Any:
+        db = self.supabaseClient
+        updateData = {}
+        if accessToken:
+            updateData["access_token"] = accessToken
+        if refreshToken:
+            updateData["refresh_token"] = refreshToken
+        if updateData:
+            db.table("externals").update(updateData).eq("id", externalId).eq("user_id", userId).execute()
 
-        fullUrl = f"{self.url.rstrip('/')}{path}"
-        reqBody = json.dumps(payload).encode("utf-8") if payload else None
+    def remove(self, externalId: str) -> Any:
+        # delete this external connection, but only if it belongs to this user
+        db = self.supabaseClient
+        existing = db.table("externals").select("id").eq("id", externalId).eq("user_id", self.userId).execute()
+        if not existing.data:
+            raise ValueError("External not found or not owned by user")
+        return db.table("externals").delete().eq("id", externalId).execute()
 
-        req = request.Request(fullUrl, data=reqBody, method=method.upper(), headers=hdrs)
-        with request.urlopen(req) as response:
-            rawData = response.read().decode("utf-8")
-            if len(rawData) > 0:
-                return json.loads(rawData)
-            return None
+    def pullCalData(self, externalId: str) -> Any:
+        # fetch events from the external provider and store them locally
+        db = self.supabaseClient
+        ext = db.table("externals").select("*").eq("id", externalId).single().execute()
+        if not ext.data:
+            return {"error": "External not found"}
+
+        accessToken = ext.data.get("access_token")
+        url = ext.data.get("url")
+        userId = ext.data.get("user_id")
+        provider = (ext.data.get("provider") or "").lower()
+
+        if provider == "google":
+            apiUrl = f"{url}/calendars/primary/events"
+            headers = {"Authorization": f"Bearer {accessToken}"}
+            resp = requests.get(apiUrl, headers=headers)
+            if resp.status_code != 200:
+                return {"error": "Failed to fetch events"}
+            events = resp.json().get("items", [])
+
+            # find or create the synced calendar for this user
+            cal = db.table("calendars").select("id").eq("owner_id", userId).eq("name", "Google Calendar (Synced)").execute()
+            if cal.data:
+                calId = cal.data[0]["id"]
+            else:
+                newCal = db.table("calendars").insert({"name": "Google Calendar (Synced)", "owner_id": userId, "member_ids": [userId], "events": []}).execute()
+                calId = newCal.data[0]["id"]
+
+            # build a row for each event and insert them all
+            rows = []
+            for e in events:
+                start = e.get("start", {})
+                end = e.get("end", {})
+                row = {
+                    "title": e.get("summary") or "Untitled Event",
+                    "calendar_ids": [calId],
+                    "owner_id": userId,
+                    "start_timestamp": start.get("dateTime") or start.get("date"),
+                    "end_timestamp": end.get("dateTime") or end.get("date"),
+                }
+                if e.get("description"):
+                    row["description"] = e["description"]
+                rows.append(row)
+            if rows:
+                db.table("events").insert(rows).execute()
+            return {"inserted": len(rows)}
+
+        elif provider == "outlook":
+            return {"error": "Outlook sync not implemented yet"}
+        else:
+            return {"error": f"Provider '{provider}' not supported"}
+
+    def pushCalData(self, externalId: str) -> Any:
+        # push local events to the external provider
+        db = self.supabaseClient
+        ext = db.table("externals").select("*").eq("id", externalId).single().execute()
+        if not ext.data:
+            return {"error": "External not found"}
+
+        accessToken = ext.data.get("access_token")
+        url = ext.data.get("url")
+        userId = ext.data.get("user_id")
+        provider = (ext.data.get("provider") or "").lower()
+
+        if provider == "google":
+            # get all calendars this user owns except the synced one
+            cals = db.table("calendars").select("id").eq("owner_id", userId).neq("name", "Google Calendar (Synced)").execute()
+            calIds = [c["id"] for c in (cals.data or [])]
+            if not calIds:
+                return {"pushed": 0}
+
+            apiUrl = f"{url}/calendars/primary/events"
+            headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+            pushed = 0
+            chunk_size = 200
+            offset = 0
+            while True:
+                chunk = db.table("events").select("title, description, start_timestamp, end_timestamp, calendar_ids").overlaps("calendar_ids", calIds).range(offset, offset + chunk_size - 1).execute()
+                localEvents = chunk.data or []
+                for e in localEvents:
+                    start = e.get("start_timestamp")
+                    end = e.get("end_timestamp") or start
+                    body = {
+                        "summary": e.get("title") or "Untitled Event",
+                        "start": {"dateTime": start},
+                        "end": {"dateTime": end},
+                    }
+                    if e.get("description"):
+                        body["description"] = e["description"]
+                    resp = requests.post(apiUrl, headers=headers, json=body)
+                    if resp.status_code in (200, 201):
+                        pushed += 1
+                if len(localEvents) < chunk_size:
+                    break
+                offset += chunk_size
+            return {"pushed": pushed}
+
+        elif provider == "outlook":
+            return {"error": "Outlook push not implemented yet"}
+        else:
+            return {"error": f"Provider '{provider}' not supported"}

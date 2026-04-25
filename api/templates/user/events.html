@@ -10,6 +10,7 @@
 {{ status_banner(status, message) }}
 
 <div class="card" style="margin-bottom:16px;">
+  <!-- this form is just a filter, it stays as a normal GET form -->
   <form method="GET" action="{{ url_for('ui.manage_events') }}"
         style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
     <label for="calendar_id"><strong>View calendar:</strong></label>
@@ -28,10 +29,8 @@
 
 <div class="card" style="margin-bottom:16px;">
   <h4>Add Event</h4>
-  <form method="POST" action="{{ url_for('ui.create_event') }}"
-        style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
-    <select name="calendar_id" required
-            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;">
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;">
+    <select id="create-calendar-id" style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;">
       {% for cal in calendars %}
         <option value="{{ cal.id }}"
                 {% if cal.id|string == selected_calendar_id %}selected{% endif %}>
@@ -39,34 +38,117 @@
         </option>
       {% endfor %}
     </select>
-    <input type="text" name="title" placeholder="Event title" required
+    <input id="create-title" type="text" placeholder="Event title"
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
-    <input type="datetime-local" name="start_timestamp"
+    <input id="create-start" type="datetime-local"
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
-    <input type="datetime-local" name="end_timestamp"
+    <input id="create-end" type="datetime-local"
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px;" />
-    <input type="text" name="description" placeholder="Description (optional)"
+    <input id="create-description" type="text" placeholder="Description (optional)"
            style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; grid-column:1/-1;" />
-    <button type="submit" class="btn"
+    <button onclick="addEvent()" class="btn"
             style="border:none; cursor:pointer; margin-top:0; width:max-content;">Create Event</button>
-  </form>
+  </div>
 </div>
 
 <div class="card">
   <h4>Events in selected calendar</h4>
   <table>
-    <tr><th>Title</th><th>Start</th><th>End</th></tr>
+    <tr><th>Title</th><th>Start</th><th>End</th><th>Actions</th></tr>
     {% if events %}
       {% for event in events %}
         <tr>
           <td>{{ event.title or "Untitled" }}</td>
           <td>{{ event.start_timestamp or "" }}</td>
           <td>{{ event.end_timestamp or "" }}</td>
+          <td style="display:flex; gap:6px; align-items:center;">
+            <a href="{{ url_for('ui.edit_event', event_id=event.id) }}"
+               class="btn btn-sm" style="margin-top:0;">Edit</a>
+            <button onclick="deleteEvent('{{ event.id }}')"
+                    class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Delete</button>
+          </td>
         </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="3" class="muted">No events found for this calendar.</td></tr>
+      <tr><td colspan="4" class="muted">No events found for this calendar.</td></tr>
     {% endif %}
   </table>
 </div>
+
+<script>
+var TOKEN = null;
+var _tokenPending = null;
+
+function getToken(callback) {
+    if (TOKEN) { callback(TOKEN); return; }
+    if (_tokenPending) {
+        _tokenPending.then(function(t) { if (t) callback(t); });
+        return;
+    }
+    _tokenPending = fetch('/ui/me/token')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { TOKEN = d.token; _tokenPending = null; return TOKEN; })
+        .catch(function(err) {
+            _tokenPending = null;
+            alert('Session error — please refresh the page and try again.');
+            console.error('getToken failed:', err);
+        });
+    _tokenPending.then(function(t) { if (t) callback(t); });
+}
+
+function addEvent() {
+    var calId = document.getElementById('create-calendar-id').value;
+    var title = document.getElementById('create-title').value.trim();
+    var start = document.getElementById('create-start').value;
+    var end = document.getElementById('create-end').value;
+    var description = document.getElementById('create-description').value.trim();
+    if (!title) {
+        alert('Please enter a title.');
+        return;
+    }
+    if (!start || !end) {
+        alert('Please enter a start and end time.');
+        return;
+    }
+    getToken(function(token) {
+        fetch('/events', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+                title: title,
+                calendar_ids: [calId],
+                description: description,
+                start_timestamp: start,
+                end_timestamp: end
+            })
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not create event.');
+            }
+        });
+    });
+}
+
+function deleteEvent(eventId) {
+    if (!confirm('Delete this event? This cannot be undone.')) return;
+    getToken(function(token) {
+        fetch('/events/' + eventId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r) {
+            if (r.ok) {
+                window.location.reload();
+            } else {
+                alert('Could not delete event.');
+            }
+        });
+    });
+}
+</script>
+
 {% endblock %}

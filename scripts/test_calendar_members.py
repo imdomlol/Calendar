@@ -9,6 +9,10 @@ from importlib import import_module
 from pathlib import Path
 from uuid import uuid4
 
+from models.calendar import Calendar, InvalidUserID
+from utils.supabase_client import get_supabase_client
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -18,10 +22,6 @@ try:
     load_dotenv(dotenv_path=PROJECT_ROOT / ".env")
 except ModuleNotFoundError:
     pass
-
-from models.calendar import Calendar, InvalidUserID
-from utils.supabase_client import get_supabase_client
-
 
 def check_env() -> int:
     required = ["SUPABASE_URL", "SUPABASE_KEY"]
