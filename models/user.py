@@ -36,18 +36,41 @@ class User:
         # cant add yourself as a friend
         if user_id == self.id:
             raise ValueError("User cannot add themselves as a friend")
-        # check if theyre already in the list
-        alreadyFriend = user_id in self.friends
-        if alreadyFriend == True:
-            raise ValueError(f"User {user_id} is already a friend.")
-        self.friends.append(user_id)
 
-    def remove_friend(self, user_id: str) -> None:
-        notPresent = user_id not in self.friends
-        if notPresent:
-            raise ValueError(f"User {user_id} is not in the friends list")
-        self.friends.remove(user_id)
+        # load current friends list from the database
+        currentFriends = self.listFriends()
 
+        # check if already friends
+        if friendId in currentFriends:
+            raise ValueError(f"User {friendId} is already a friend")
+
+        # add the new friend and save to the database
+        currentFriends.append(friendId)
+        db.table("users").update({"friends": currentFriends}).eq("id", self.userId).execute()
+        return currentFriends
+
+    def removeFriend(self, friendId: str) -> None:
+        # load current friends list from the database
+        db = get_supabase_client()
+        currentFriends = self.listFriends()
+
+        if friendId not in currentFriends:
+            raise ValueError(f"User {friendId} is not in the friends list")
+
+        # remove and save to the database
+        currentFriends.remove(friendId)
+        db.table("users").update({"friends": currentFriends}).eq("id", self.userId).execute()
+
+    # -------------------------
+    # Account stuff
+    # -------------------------
+
+    def removeAccount(self) -> Any:
+        db = get_supabase_client()
+        result = db.table("users").delete().eq("id", self.userId).execute()
+        # also remove from Supabase auth so the user can't log back in
+        db.auth.admin.delete_user(self.userId)
+        return result
 
     def __repr__(self) -> str:
         return f"<User: {self.display_name}>"
