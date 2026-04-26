@@ -8,6 +8,7 @@
 </div>
 
 {{ status_banner(status, message) }}
+<div id="action-status" style="display:none;" class="card banner"></div>
 
 <div class="grid" style="margin-bottom: 20px;">
   <div class="card">
@@ -41,40 +42,68 @@
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
             <script>
-            async function pullExternal(externalId, form) {
-              try {
-                const resp = await fetch(`/externals/${externalId}/pull`, {
+            function showActionStatus(ok, msg) {
+              var el = document.getElementById('action-status');
+              el.className = 'card banner ' + (ok ? 'banner-ok' : 'banner-error');
+              el.textContent = msg;
+              el.style.display = '';
+              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            function setButtonBusy(btn, busy, label) {
+              btn.disabled = busy;
+              btn.textContent = busy ? 'Working...' : label;
+            }
+
+            function pullExternal(externalId, form) {
+              var btn = form.querySelector('button');
+              setButtonBusy(btn, true, 'Pull');
+              getToken(function(token) {
+                fetch('/externals/' + externalId + '/pull', {
                   method: 'POST',
-                  headers: { 'Accept': 'application/json' },
-                  credentials: 'same-origin',
+                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
+                }).then(function(resp) {
+                  return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
+                }).then(function(res) {
+                  if (res.ok) {
+                    showActionStatus(true, 'Pull successful — ' + (res.data.data && res.data.data.inserted != null ? res.data.data.inserted + ' events imported.' : 'done.'));
+                    setButtonBusy(btn, false, 'Pull');
+                  } else {
+                    var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error (HTTP ' + res.data + ')';
+                    showActionStatus(false, 'Pull failed: ' + msg);
+                    setButtonBusy(btn, false, 'Pull');
+                  }
+                }).catch(function(e) {
+                  showActionStatus(false, 'Pull failed: could not reach the server. Check your connection and try again.');
+                  setButtonBusy(btn, false, 'Pull');
                 });
-                if (resp.ok) {
-                  location.reload();
-                } else {
-                  const data = await resp.json();
-                  alert('Pull failed: ' + (data.error || resp.status));
-                }
-              } catch (e) {
-                alert('Pull failed: ' + e);
-              }
+              });
               return false;
             }
-            async function pushExternal(externalId, form) {
-              try {
-                const resp = await fetch(`/externals/${externalId}/push`, {
+
+            function pushExternal(externalId, form) {
+              var btn = form.querySelector('button');
+              setButtonBusy(btn, true, 'Push');
+              getToken(function(token) {
+                fetch('/externals/' + externalId + '/push', {
                   method: 'POST',
-                  headers: { 'Accept': 'application/json' },
-                  credentials: 'same-origin',
+                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
+                }).then(function(resp) {
+                  return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
+                }).then(function(res) {
+                  if (res.ok) {
+                    showActionStatus(true, 'Push successful — ' + (res.data.data && res.data.data.pushed != null ? res.data.data.pushed + ' events sent to Google.' : 'done.'));
+                    setButtonBusy(btn, false, 'Push');
+                  } else {
+                    var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error';
+                    showActionStatus(false, 'Push failed: ' + msg);
+                    setButtonBusy(btn, false, 'Push');
+                  }
+                }).catch(function(e) {
+                  showActionStatus(false, 'Push failed: could not reach the server. Check your connection and try again.');
+                  setButtonBusy(btn, false, 'Push');
                 });
-                if (resp.ok) {
-                  location.reload();
-                } else {
-                  const data = await resp.json();
-                  alert('Push failed: ' + (data.error || resp.status));
-                }
-              } catch (e) {
-                alert('Push failed: ' + e);
-              }
+              });
               return false;
             }
             </script>
