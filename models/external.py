@@ -24,13 +24,14 @@ class External:
     def to_record(self) -> dict[str, Any]:
         # build a dict with column names matching the externals table in supabase
         rec = {
-            "id": self.id,
             "url": self.url,
             "provider": self.provider,
             "user_id": self.userId,
             "access_token": self.accessToken,
             "refresh_token": self.refreshToken,
         }
+        if self.id is not None:
+            rec["id"] = self.id
         return rec
 
     def save(self) -> Any:
