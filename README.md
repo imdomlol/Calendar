@@ -7,7 +7,7 @@ Calendar website for 362.
 - Git installed
 - Python 3.12+
 
-## 2) Get the psroject on Your Computer
+## 2) Get the project on Your Computer
 
 ### Option A: You have write access to this repository
 
