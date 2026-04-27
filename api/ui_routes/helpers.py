@@ -40,16 +40,6 @@ def _compute_build_info():
 BUILD_INFO = _compute_build_info()
 
 
-placeholder_calendars = [
-    {"id": 1, "name": "Work Calendar", "owner": "Alice"},
-    {"id": 2, "name": "Personal Calendar", "owner": "Alice"},
-]
-
-placeholder_events = [
-    {"id": 1, "calendar_id": 1, "title": "Team Meeting", "date": "2026-04-15", "time": "10:00"},
-    {"id": 2, "calendar_id": 2, "title": "Gym Session", "date": "2026-04-16", "time": "18:00"},
-]
-
 placeholder_friends = ["Jamie", "Morgan", "Taylor"]
 placeholder_externals = ["Google Calendar", "Outlook Calendar"]
 placeholder_logs = [
@@ -226,17 +216,7 @@ def build_month_preview_data(events_for_calendar):
 
 
 def guest_nav():
-    # this builds the nav list for guests
-    # guests are users who are not logged in
-    # we return a list where each item has a label and an href
-    # label is the text that shows in the nav
-    # href is the url it goes to when clicked
-    # url_for turns a function name into an actual url
-    navList = []
-    navList.append({"label": "View Calendars", "href": url_for("ui.view_calendars")})
-    navList.append({"label": "View Events", "href": url_for("ui.view_events")})
-    # return the nav list
-    return navList
+    return []
 
 
 def features_nav():
@@ -249,11 +229,8 @@ def features_nav():
             {"label": "Friends", "href": url_for("ui.manage_friends")},
         ]
     else:
-        # not logged in so show links that go to login for protected stuff
         return [
-            {"label": "Calendars", "href": url_for("ui.view_calendars")},
             {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
-            {"label": "Events", "href": url_for("ui.view_events")},
         ]
 
 

@@ -6,10 +6,8 @@ from api.ui_routes.helpers import (
     render_page,
     user_nav,
     admin_nav,
-    guest_nav,
     ui_login_required,
 )
-from api.ui_routes.helpers import placeholder_calendars, placeholder_events
 from models.calendar import Calendar
 
 
@@ -63,18 +61,6 @@ def home():
 @ui_bp.route("/home")
 def brand_home():
     return redirect(url_for("ui.home"))
-
-
-@ui_bp.route("/calendars")
-def view_calendars():
-    return render_page("View Calendars", "guest", guest_nav(), "home/view_calendars.html",
-                       calendars=placeholder_calendars)
-
-
-@ui_bp.route("/events")
-def view_events():
-    return render_page("View Events", "guest", guest_nav(), "home/view_events.html",
-                       events=placeholder_events)
 
 
 @ui_bp.route("/dashboard/<role>")
