@@ -6,7 +6,7 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ## Bugs / Quick Fixes
 
-- [ ] **Settings page — Pull/Push buttons should use UI routes**
+- [x] **Settings page — Pull/Push buttons should use UI routes**
   The Pull and Push buttons currently call the API routes (`/externals/<id>/pull`, `/externals/<id>/push`), which require a Bearer token. The website should use the existing UI routes (`/settings/external/google/<id>/sync` and `/settings/external/google/<id>/push`) instead, since those use the session and are simpler. The API routes are meant for external callers, not the website itself.
 
 ---
@@ -30,7 +30,28 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ---
 
+## Incomplete Features (continued)
+
+- [ ] **Live syncing of external calendars**
+  Currently sync is manual (user clicks Pull). Add background or webhook-based syncing so external calendar changes are reflected automatically without user action.
+
+---
+
 ## Architecture / Cleanup
 
 - [ ] **Separate API and UI route responsibilities clearly**
-  The website's JS currently reaches into API routes (Bearer token auth) for some actions and UI routes (session auth) for others. The rule should be: website buttons and forms use UI routes; API routes are for external consumers only (scripts, mobile apps, etc.).
+  Architecture direction: the website uses UI routes exclusively (session cookie auth, no Bearer token). The REST API is reserved for live syncing — webhook receivers from Google/Outlook that arrive with no user session.
+
+- [x] **Convert internal AJAX calls from REST API to UI routes**
+  The following pages use `fetch` with a Bearer token against the REST API, but should instead call JSON-returning UI routes (session cookie auth, no token needed). Each UI route calls the model directly, same as the REST route does today.
+  - `home/calendar.html` — `POST /events`, `GET /events/<id>`, `DELETE /events/<id>`
+  - `user/events.html` — `POST /events`, `DELETE /events/<id>`
+  - `user/events_edit.html` — `PUT /events/<id>`
+  - `user/calendars.html` — `POST /calendars`, `DELETE /calendars/<id>`, `POST/DELETE /calendars/<id>/guest-link`
+  - `user/friends.html` — `POST /friends`, `DELETE /friends/<id>`
+  - `user/remove_account.html` — `DELETE /me`
+  - `settings/auth.html` — `DELETE /externals/<id>` (Disconnect button)
+  New UI routes should live under `/ui/user/...`, accept JSON bodies where needed, and return JSON responses. JS callers drop the `getToken()` dance and use plain `fetch` with no `Authorization` header.
+
+- [ ] **Add structured JSON error responses to UI JSON endpoints**
+  The UI JSON routes in `ui_routes/routes/user.py` currently return plain HTTP status codes on failure (400/403/404). Templates show generic `alert()` messages. Upgrade to return `{"error": "descriptive message"}` so the JS can surface meaningful errors to the user.

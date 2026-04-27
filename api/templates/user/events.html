@@ -76,26 +76,6 @@
 </div>
 
 <script>
-var TOKEN = null;
-var _tokenPending = null;
-
-function getToken(callback) {
-    if (TOKEN) { callback(TOKEN); return; }
-    if (_tokenPending) {
-        _tokenPending.then(function(t) { if (t) callback(t); });
-        return;
-    }
-    _tokenPending = fetch('/ui/me/token')
-        .then(function(r) { return r.json(); })
-        .then(function(d) { TOKEN = d.token; _tokenPending = null; return TOKEN; })
-        .catch(function(err) {
-            _tokenPending = null;
-            alert('Session error — please refresh the page and try again.');
-            console.error('getToken failed:', err);
-        });
-    _tokenPending.then(function(t) { if (t) callback(t); });
-}
-
 function addEvent() {
     var calId = document.getElementById('create-calendar-id').value;
     var title = document.getElementById('create-title').value.trim();
@@ -110,43 +90,33 @@ function addEvent() {
         alert('Please enter a start and end time.');
         return;
     }
-    getToken(function(token) {
-        fetch('/events', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + token
-            },
-            body: JSON.stringify({
-                title: title,
-                calendar_ids: [calId],
-                description: description,
-                start_timestamp: start,
-                end_timestamp: end
-            })
-        }).then(function(r) {
-            if (r.ok) {
-                window.location.reload();
-            } else {
-                alert('Could not create event.');
-            }
-        });
+    fetch('/ui/user/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            title: title,
+            calendar_ids: [calId],
+            description: description,
+            start_timestamp: start,
+            end_timestamp: end
+        })
+    }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            alert('Could not create event.');
+        }
     });
 }
 
 function deleteEvent(eventId) {
     if (!confirm('Delete this event? This cannot be undone.')) return;
-    getToken(function(token) {
-        fetch('/events/' + eventId, {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer ' + token }
-        }).then(function(r) {
-            if (r.ok) {
-                window.location.reload();
-            } else {
-                alert('Could not delete event.');
-            }
-        });
+    fetch('/ui/user/events/' + eventId, { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            alert('Could not delete event.');
+        }
     });
 }
 </script>

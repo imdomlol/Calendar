@@ -8,7 +8,6 @@
 </div>
 
 {{ status_banner(status, message) }}
-<div id="action-status" style="display:none;" class="card banner"></div>
 
 <div class="grid" style="margin-bottom: 20px;">
   <div class="card">
@@ -41,65 +40,12 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form onsubmit="return pullExternal('{{ row.id }}', this);" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_sync_google', external_id=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form onsubmit="return pushExternal('{{ row.id }}', this);" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_push_google', external_id=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
-            <script>
-            function pullExternal(externalId, form) {
-              var btn = form.querySelector('button');
-              setButtonBusy(btn, true, 'Pull');
-              getToken(function(token) {
-                fetch('/externals/' + externalId + '/pull', {
-                  method: 'POST',
-                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
-                }).then(function(resp) {
-                  return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
-                }).then(function(res) {
-                  if (res.ok) {
-                    showActionStatus(true, 'Pull successful — ' + (res.data.data && res.data.data.inserted != null ? res.data.data.inserted + ' events imported.' : 'done.'));
-                    setButtonBusy(btn, false, 'Pull');
-                  } else {
-                    var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error (HTTP ' + res.data + ')';
-                    showActionStatus(false, 'Pull failed: ' + msg);
-                    setButtonBusy(btn, false, 'Pull');
-                  }
-                }).catch(function(e) {
-                  showActionStatus(false, 'Pull failed: could not reach the server. Check your connection and try again.');
-                  setButtonBusy(btn, false, 'Pull');
-                });
-              });
-              return false;
-            }
-
-            function pushExternal(externalId, form) {
-              var btn = form.querySelector('button');
-              setButtonBusy(btn, true, 'Push');
-              getToken(function(token) {
-                fetch('/externals/' + externalId + '/push', {
-                  method: 'POST',
-                  headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
-                }).then(function(resp) {
-                  return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
-                }).then(function(res) {
-                  if (res.ok) {
-                    showActionStatus(true, 'Push successful — ' + (res.data.data && res.data.data.pushed != null ? res.data.data.pushed + ' events sent to Google.' : 'done.'));
-                    setButtonBusy(btn, false, 'Push');
-                  } else {
-                    var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error';
-                    showActionStatus(false, 'Push failed: ' + msg);
-                    setButtonBusy(btn, false, 'Push');
-                  }
-                }).catch(function(e) {
-                  showActionStatus(false, 'Push failed: could not reach the server. Check your connection and try again.');
-                  setButtonBusy(btn, false, 'Push');
-                });
-              });
-              return false;
-            }
-            </script>
             <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
                     onclick="disconnectExternal('{{ row.id }}')">Disconnect</button>
           </td>
@@ -126,10 +72,10 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form onsubmit="return pullOutlookExternal('{{ row.id }}', this);" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_sync_outlook', external_id=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form onsubmit="return pushOutlookExternal('{{ row.id }}', this);" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_push_outlook', external_id=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
             <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
@@ -143,105 +89,14 @@
   </table>
 </div>
 <script>
-function pullOutlookExternal(externalId, form) {
-  var btn = form.querySelector('button');
-  setButtonBusy(btn, true, 'Pull');
-  getToken(function(token) {
-    fetch('/externals/' + externalId + '/pull', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
-    }).then(function(resp) {
-      return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
-    }).then(function(res) {
-      if (res.ok) {
-        showActionStatus(true, 'Pull successful — ' + (res.data.data && res.data.data.inserted != null ? res.data.data.inserted + ' events imported.' : 'done.'));
-        setButtonBusy(btn, false, 'Pull');
-      } else {
-        var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error';
-        showActionStatus(false, 'Pull failed: ' + msg);
-        setButtonBusy(btn, false, 'Pull');
-      }
-    }).catch(function(e) {
-      showActionStatus(false, 'Pull failed: could not reach the server. Check your connection and try again.');
-      setButtonBusy(btn, false, 'Pull');
-    });
-  });
-  return false;
-}
-
-function pushOutlookExternal(externalId, form) {
-  var btn = form.querySelector('button');
-  setButtonBusy(btn, true, 'Push');
-  getToken(function(token) {
-    fetch('/externals/' + externalId + '/push', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + token },
-    }).then(function(resp) {
-      return resp.json().then(function(data) { return { ok: resp.ok, data: data }; });
-    }).then(function(res) {
-      if (res.ok) {
-        showActionStatus(true, 'Push successful — ' + (res.data.data && res.data.data.pushed != null ? res.data.data.pushed + ' events sent to Outlook.' : 'done.'));
-        setButtonBusy(btn, false, 'Push');
-      } else {
-        var msg = (res.data && (res.data.error || res.data.message)) || 'Unknown error';
-        showActionStatus(false, 'Push failed: ' + msg);
-        setButtonBusy(btn, false, 'Push');
-      }
-    }).catch(function(e) {
-      showActionStatus(false, 'Push failed: could not reach the server. Check your connection and try again.');
-      setButtonBusy(btn, false, 'Push');
-    });
-  });
-  return false;
-}
-</script>
-<script>
-function showActionStatus(ok, msg) {
-  var el = document.getElementById('action-status');
-  el.className = 'card banner ' + (ok ? 'banner-ok' : 'banner-error');
-  el.textContent = msg;
-  el.style.display = '';
-  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function setButtonBusy(btn, busy, label) {
-  btn.disabled = busy;
-  btn.textContent = busy ? 'Working...' : label;
-}
-
-var SETTINGS_TOKEN = null;
-var _tokenPending = null;
-
-function getToken(callback) {
-    if (SETTINGS_TOKEN) { callback(SETTINGS_TOKEN); return; }
-    if (_tokenPending) {
-        _tokenPending.then(function(t) { if (t) callback(t); });
-        return;
-    }
-    _tokenPending = fetch('/ui/me/token')
-        .then(function(r) { return r.json(); })
-        .then(function(d) { SETTINGS_TOKEN = d.token; _tokenPending = null; return SETTINGS_TOKEN; })
-        .catch(function(err) {
-            _tokenPending = null;
-            alert('Session error — please refresh the page and try again.');
-            console.error('getToken failed:', err);
-        });
-    _tokenPending.then(function(t) { if (t) callback(t); });
-}
-
 function disconnectExternal(externalId) {
     if (!confirm('Disconnect this account?')) return;
-    getToken(function(token) {
-        fetch('/externals/' + externalId, {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer ' + token }
-        }).then(function(r) {
-            if (r.ok) {
-                window.location.reload();
-            } else {
-                alert('Could not disconnect.');
-            }
-        });
+    fetch('/ui/settings/external/' + externalId, { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            alert('Could not disconnect.');
+        }
     });
 }
 </script>
