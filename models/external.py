@@ -1,5 +1,6 @@
 import requests
 from typing import Any
+from utils.logger import logEvent
 
 
 class External:
@@ -57,7 +58,40 @@ class External:
             raise ValueError("External not found or not owned by user")
         return db.table("externals").delete().eq("id", externalId).execute()
 
-    def pullCalData(self, externalId: str) -> Any:
+    def _refresh_access_token(self, ext_data: dict, client_id: str, client_secret: str) -> "str | None":
+        provider = (ext_data.get("provider") or "").lower()
+        refresh_token = ext_data.get("refresh_token")
+        if not refresh_token or not client_id or not client_secret:
+            return None
+        if provider == "google":
+            token_url = "https://oauth2.googleapis.com/token"
+        elif provider == "outlook":
+            token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        else:
+            return None
+        resp = requests.post(token_url, data={
+            "grant_type": "refresh_token",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+        })
+        if resp.status_code != 200:
+            logEvent("WARNING", "token_refresh_failed",
+                     f"Token refresh failed for provider '{provider}'",
+                     userId=ext_data.get("user_id"),
+                     details={"external_id": ext_data.get("id"), "status_code": resp.status_code})
+            return None
+        new_tokens = resp.json()
+        new_access_token = new_tokens.get("access_token")
+        if not new_access_token:
+            return None
+        update_data: dict = {"access_token": new_access_token}
+        if new_tokens.get("refresh_token"):
+            update_data["refresh_token"] = new_tokens["refresh_token"]
+        self.supabaseClient.table("externals").update(update_data).eq("id", ext_data["id"]).execute()
+        return new_access_token
+
+    def pullCalData(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
         # fetch events from the external provider and store them locally
         db = self.supabaseClient
         ext = db.table("externals").select("*").eq("id", externalId).single().execute()
@@ -73,6 +107,12 @@ class External:
             apiUrl = f"{url}/calendars/primary/events"
             headers = {"Authorization": f"Bearer {accessToken}"}
             resp = requests.get(apiUrl, headers=headers)
+            if resp.status_code == 401:
+                new_token = self._refresh_access_token(ext.data, client_id or "", client_secret or "")
+                if not new_token:
+                    return {"error": "token_expired"}
+                headers["Authorization"] = f"Bearer {new_token}"
+                resp = requests.get(apiUrl, headers=headers)
             if resp.status_code != 200:
                 return {"error": "Failed to fetch events"}
             events = resp.json().get("items", [])
@@ -114,8 +154,16 @@ class External:
 
             events = []
             nextUrl = graphUrl
+            refreshed = False
             while nextUrl:
                 resp = requests.get(nextUrl, headers=headers, params=params if nextUrl == graphUrl else None)
+                if resp.status_code == 401 and not refreshed:
+                    new_token = self._refresh_access_token(ext.data, client_id or "", client_secret or "")
+                    if not new_token:
+                        return {"error": "token_expired"}
+                    headers["Authorization"] = f"Bearer {new_token}"
+                    refreshed = True
+                    resp = requests.get(nextUrl, headers=headers, params=params if nextUrl == graphUrl else None)
                 if resp.status_code != 200:
                     return {"error": "Failed to fetch Outlook events"}
                 data = resp.json()
@@ -151,7 +199,7 @@ class External:
         else:
             return {"error": f"Provider '{provider}' not supported"}
 
-    def pushCalData(self, externalId: str) -> Any:
+    def pushCalData(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
         # push local events to the external provider
         db = self.supabaseClient
         ext = db.table("externals").select("*").eq("id", externalId).single().execute()
@@ -173,6 +221,7 @@ class External:
             apiUrl = f"{url}/calendars/primary/events"
             headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
             pushed = 0
+            refreshed = False
             chunk_size = 200
             offset = 0
             while True:
@@ -189,6 +238,13 @@ class External:
                     if e.get("description"):
                         body["description"] = e["description"]
                     resp = requests.post(apiUrl, headers=headers, json=body)
+                    if resp.status_code == 401 and not refreshed:
+                        new_token = self._refresh_access_token(ext.data, client_id or "", client_secret or "")
+                        if not new_token:
+                            return {"error": "token_expired"}
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        refreshed = True
+                        resp = requests.post(apiUrl, headers=headers, json=body)
                     if resp.status_code in (200, 201):
                         pushed += 1
                 if len(localEvents) < chunk_size:
@@ -205,6 +261,7 @@ class External:
             apiUrl = "https://graph.microsoft.com/v1.0/me/events"
             headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
             pushed = 0
+            refreshed = False
             chunk_size = 200
             offset = 0
             while True:
@@ -220,6 +277,13 @@ class External:
                         "end": {"dateTime": end, "timeZone": "UTC"},
                     }
                     resp = requests.post(apiUrl, headers=headers, json=body)
+                    if resp.status_code == 401 and not refreshed:
+                        new_token = self._refresh_access_token(ext.data, client_id or "", client_secret or "")
+                        if not new_token:
+                            return {"error": "token_expired"}
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        refreshed = True
+                        resp = requests.post(apiUrl, headers=headers, json=body)
                     if resp.status_code in (200, 201):
                         pushed += 1
                 if len(localEvents) < chunk_size:

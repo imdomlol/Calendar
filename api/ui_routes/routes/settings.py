@@ -20,6 +20,12 @@ def _clear_oauth_session():
     session.pop("google_oauth_redirect_uri", None)
 
 
+def _sync_error_message(error: str, provider: str) -> str:
+    if error == "token_expired":
+        return f"Your {provider} access has expired — please reconnect your account."
+    return error
+
+
 @ui_bp.route("/settings")
 def settings_page():
     user = _ui_user()
@@ -156,12 +162,13 @@ def settings_google_callback():
 @ui_login_required
 def settings_sync_google(external_id):
     uid = _ui_user()["id"]
+    client_id, client_secret = _google_oauth_config()
     try:
         db = get_supabase_client()
         ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
-        result = ext.pullCalData(external_id)
+        result = ext.pullCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
-            return redirect(url_for("ui.settings_page", status="error", message=result["error"]))
+            return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Google")))
         inserted = result.get("inserted", 0)
         return redirect(url_for("ui.settings_page", status="ok",
                                 message=f"Pulled {inserted} events into 'Google Calendar (Synced)'."))
@@ -173,12 +180,13 @@ def settings_sync_google(external_id):
 @ui_login_required
 def settings_push_google(external_id):
     uid = _ui_user()["id"]
+    client_id, client_secret = _google_oauth_config()
     try:
         db = get_supabase_client()
         ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
-        result = ext.pushCalData(external_id)
+        result = ext.pushCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
-            return redirect(url_for("ui.settings_page", status="error", message=result["error"]))
+            return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Google")))
         pushed = result.get("pushed", 0)
         return redirect(url_for("ui.settings_page", status="ok",
                                 message=f"Pushed {pushed} events to Google Calendar."))
@@ -289,12 +297,13 @@ def settings_outlook_callback():
 @ui_login_required
 def settings_sync_outlook(external_id):
     uid = _ui_user()["id"]
+    client_id, client_secret = _outlook_oauth_config()
     try:
         db = get_supabase_client()
         ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
-        result = ext.pullCalData(external_id)
+        result = ext.pullCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
-            return redirect(url_for("ui.settings_page", status="error", message=result["error"]))
+            return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Outlook")))
         inserted = result.get("inserted", 0)
         return redirect(url_for("ui.settings_page", status="ok",
                                 message=f"Pulled {inserted} events into 'Outlook Calendar (Synced)'."))
@@ -306,12 +315,13 @@ def settings_sync_outlook(external_id):
 @ui_login_required
 def settings_push_outlook(external_id):
     uid = _ui_user()["id"]
+    client_id, client_secret = _outlook_oauth_config()
     try:
         db = get_supabase_client()
         ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
-        result = ext.pushCalData(external_id)
+        result = ext.pushCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
-            return redirect(url_for("ui.settings_page", status="error", message=result["error"]))
+            return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Outlook")))
         pushed = result.get("pushed", 0)
         return redirect(url_for("ui.settings_page", status="ok",
                                 message=f"Pushed {pushed} events to Outlook."))

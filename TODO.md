@@ -6,6 +6,9 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ## Bugs / Quick Fixes
 
+- [ ] **External calendar sync fails after token expiry**
+  `pullCalData` and `pushCalData` in `models/external.py` use the stored `access_token` directly. Google tokens expire after 1 hour; Outlook tokens expire similarly. When expired, pull returns "Failed to fetch events" and push sends 0 events. Both methods should detect a 401 response and use the stored `refresh_token` to obtain a new access token (via Google's or Microsoft's token endpoint), update the `externals` table with the new tokens, then retry the request.
+
 - [x] **Settings page — Pull/Push buttons should use UI routes**
   The Pull and Push buttons currently call the API routes (`/externals/<id>/pull`, `/externals/<id>/push`), which require a Bearer token. The website should use the existing UI routes (`/settings/external/google/<id>/sync` and `/settings/external/google/<id>/push`) instead, since those use the session and are simpler. The API routes are meant for external callers, not the website itself.
 
