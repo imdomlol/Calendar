@@ -1,7 +1,7 @@
 from flask import jsonify, request
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav, placeholder_externals
-from utils.logger import _get_logger_client
+from utils.logger import get_logger_client
 
 
 # this is the route that shows system logs for admins
@@ -69,7 +69,7 @@ def system_logs_data():
 
     # try to get the logs from supabase
     try:
-        client = _get_logger_client()
+        client = get_logger_client()
 
         # if client is None it means the secret key env var isnt set
         if client is not None:

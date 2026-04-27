@@ -4,7 +4,7 @@ from supabase import create_client
 _logger_client = None
 
 
-def _get_logger_client():
+def get_logger_client():
     global _logger_client
     if _logger_client is not None:
         return _logger_client
@@ -33,7 +33,7 @@ def logEvent(level, eventType, message, userId=None, path=None, method=None, sta
 
     # now try to insert into supabase
     try:
-        supabase = _get_logger_client()
+        supabase = get_logger_client()
         if supabase is None:
             print("WARNING: SUPABASE_SECRET_API_KEY not set, skipping log")
             return
