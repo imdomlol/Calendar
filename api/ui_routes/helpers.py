@@ -172,6 +172,12 @@ def _google_oauth_config():
     return cId, cSecret
 
 
+def _outlook_oauth_config():
+    cId = (os.environ.get("MS_CLIENT_ID") or "").strip()
+    cSecret = (os.environ.get("MS_CLIENT_SECRET") or "").strip()
+    return cId, cSecret
+
+
 
 def build_month_preview_data(events_for_calendar):
     # get todays date so we know which month to build

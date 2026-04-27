@@ -13,11 +13,14 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ## Incomplete Features
 
-- [ ] **Outlook sync (pull)**
-  `External.pullCalData()` in `models/external.py` returns an error for the `outlook` provider. Needs implementation once we have Outlook OAuth set up.
+- [x] **Outlook sync (pull)**
+  Implemented: OAuth redirect flow via `/ui/settings/external/azure/login` → `/ui/settings/external/azure/callback`, events fetched from Graph API with plain-text body, stored in "Outlook Calendar (Synced)".
 
-- [ ] **Outlook sync (push)**
-  Same as above — `External.pushCalData()` has a stub for Outlook that returns an error.
+- [x] **Outlook sync (push)**
+  Implemented: local events (excluding the synced calendar) pushed to `POST /me/events` on the Graph API.
+
+- [ ] **Deduplicate synced calendars**
+  Both Google and Outlook sync currently append events on every pull. Re-syncing creates duplicates. The pull should clear existing events in the "(Synced)" calendar before inserting fresh ones.
 
 - [ ] **Admin — Unlink External Calendars page uses placeholder data**
   `/admin/unlink` in `ui_routes/routes/admin.py` passes a hardcoded `placeholder_externals` list to the template instead of fetching real provider data from the database.

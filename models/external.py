@@ -105,7 +105,49 @@ class External:
             return {"inserted": len(rows)}
 
         elif provider == "outlook":
-            return {"error": "Outlook sync not implemented yet"}
+            graphUrl = "https://graph.microsoft.com/v1.0/me/events"
+            headers = {
+                "Authorization": f"Bearer {accessToken}",
+                "Prefer": 'outlook.body-content-type="text"',
+            }
+            params = {"$select": "subject,body,start,end", "$top": 100}
+
+            events = []
+            nextUrl = graphUrl
+            while nextUrl:
+                resp = requests.get(nextUrl, headers=headers, params=params if nextUrl == graphUrl else None)
+                if resp.status_code != 200:
+                    return {"error": "Failed to fetch Outlook events"}
+                data = resp.json()
+                events.extend(data.get("value", []))
+                nextUrl = data.get("@odata.nextLink")
+
+            cal = db.table("calendars").select("id").eq("owner_id", userId).eq("name", "Outlook Calendar (Synced)").execute()
+            if cal.data:
+                calId = cal.data[0]["id"]
+            else:
+                newCal = db.table("calendars").insert({"name": "Outlook Calendar (Synced)", "owner_id": userId, "member_ids": [userId], "events": []}).execute()
+                calId = newCal.data[0]["id"]
+
+            rows = []
+            for e in events:
+                start = e.get("start", {})
+                end = e.get("end", {})
+                row = {
+                    "title": e.get("subject") or "Untitled Event",
+                    "calendar_ids": [calId],
+                    "owner_id": userId,
+                    "start_timestamp": start.get("dateTime"),
+                    "end_timestamp": end.get("dateTime"),
+                }
+                body_content = (e.get("body") or {}).get("content", "").strip()
+                if body_content:
+                    row["description"] = body_content
+                rows.append(row)
+            if rows:
+                db.table("events").insert(rows).execute()
+            return {"inserted": len(rows)}
+
         else:
             return {"error": f"Provider '{provider}' not supported"}
 
@@ -155,6 +197,35 @@ class External:
             return {"pushed": pushed}
 
         elif provider == "outlook":
-            return {"error": "Outlook push not implemented yet"}
+            cals = db.table("calendars").select("id").eq("owner_id", userId).neq("name", "Outlook Calendar (Synced)").execute()
+            calIds = [c["id"] for c in (cals.data or [])]
+            if not calIds:
+                return {"pushed": 0}
+
+            apiUrl = "https://graph.microsoft.com/v1.0/me/events"
+            headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+            pushed = 0
+            chunk_size = 200
+            offset = 0
+            while True:
+                chunk = db.table("events").select("title, description, start_timestamp, end_timestamp, calendar_ids").overlaps("calendar_ids", calIds).range(offset, offset + chunk_size - 1).execute()
+                localEvents = chunk.data or []
+                for e in localEvents:
+                    start = e.get("start_timestamp")
+                    end = e.get("end_timestamp") or start
+                    body = {
+                        "subject": e.get("title") or "Untitled Event",
+                        "body": {"contentType": "text", "content": e.get("description") or ""},
+                        "start": {"dateTime": start, "timeZone": "UTC"},
+                        "end": {"dateTime": end, "timeZone": "UTC"},
+                    }
+                    resp = requests.post(apiUrl, headers=headers, json=body)
+                    if resp.status_code in (200, 201):
+                        pushed += 1
+                if len(localEvents) < chunk_size:
+                    break
+                offset += chunk_size
+            return {"pushed": pushed}
+
         else:
             return {"error": f"Provider '{provider}' not supported"}
