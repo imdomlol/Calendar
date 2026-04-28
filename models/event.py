@@ -46,6 +46,15 @@ class Event:
         db = get_supabase_client()
         return db.table("events").delete().match({"id": self.id}).execute()
 
+    @staticmethod
+    def find(eventId: str) -> dict | None:
+        db = get_supabase_client()
+        result = db.table("events").select("*").eq("id", eventId).limit(1).execute()
+        rows = result.data or []
+        if rows:
+            return rows[0]
+        return None
+
     def edit(self, title=None, description=None, startTimestamp=None, endTimestamp=None, calendarIds=None) -> Any:
         if self.id is None:
             raise ValueError("Event must be saved before it can be edited")

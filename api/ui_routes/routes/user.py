@@ -96,13 +96,12 @@ def manage_events():
 @ui_login_required
 def edit_event(event_id):
     uid = _ui_user()["id"]
-    u = _make_ui_user()
-    rows = u.viewEvent(event_id)
-    if not rows or rows[0].get("owner_id") != uid:
+    event = Event.find(event_id)
+    if not event or event.get("owner_id") != uid:
         return redirect(url_for("ui.manage_events", status="error", message=f"Event {event_id} not found"))
     return render_page(
         "Edit Event", "user", user_nav(), "user/events_edit.html",
-        event=rows[0],
+        event=event,
         status="",
         message="",
     )
