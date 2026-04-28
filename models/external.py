@@ -39,6 +39,14 @@ class External:
         # insert this external connection into the database
         record = self.to_record()
         return self.supabaseClient.table("externals").insert(record).execute()
+    
+    def remove(self, externalId: str) -> Any:
+        # delete this external connection, but only if it belongs to this user
+        db = self.supabaseClient
+        existing = db.table("externals").select("id").eq("id", externalId).eq("user_id", self.userId).execute()
+        if not existing.data:
+            raise ValueError("External not found or not owned by user")
+        return db.table("externals").delete().eq("id", externalId).execute()
 
     def updateTokens(self, externalId: str, userId: str, accessToken: str = None, refreshToken: str = None) -> Any:
         db = self.supabaseClient
@@ -49,14 +57,6 @@ class External:
             updateData["refresh_token"] = refreshToken
         if updateData:
             db.table("externals").update(updateData).eq("id", externalId).eq("user_id", userId).execute()
-
-    def remove(self, externalId: str) -> Any:
-        # delete this external connection, but only if it belongs to this user
-        db = self.supabaseClient
-        existing = db.table("externals").select("id").eq("id", externalId).eq("user_id", self.userId).execute()
-        if not existing.data:
-            raise ValueError("External not found or not owned by user")
-        return db.table("externals").delete().eq("id", externalId).execute()
 
     def _refresh_access_token(self, ext_data: dict, client_id: str, client_secret: str) -> "str | None":
         provider = (ext_data.get("provider") or "").lower()
