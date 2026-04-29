@@ -4,6 +4,21 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ---
 
+## Bugs / Quick Fixes
+
+- [ ] **Cascade delete orphaned events when a calendar is removed**
+  When a calendar is deleted, any event whose `calendar_ids` contained that calendar should have it removed from the list. If the resulting `calendar_ids` is empty, the event has no remaining calendar and should be deleted entirely.
+  - **Plan:** In `models/calendar.py` `remove()` (line 39), before the calendar row is deleted:
+    1. `db = get_supabase_client()`
+    2. Fetch every event linked to this calendar: `result = db.table("events").select("id, calendar_ids").contains("calendar_ids", [self.id]).execute()`
+    3. Loop over `result.data or []`. For each event, build `remaining = [c for c in (row.get("calendar_ids") or []) if c != self.id]`.
+    4. If `remaining` is empty: `db.table("events").delete().eq("id", row["id"]).execute()`.
+    5. Otherwise: `db.table("events").update({"calendar_ids": remaining}).eq("id", row["id"]).execute()`.
+    6. Then run the existing `db.table("calendars").delete().eq("id", self.id).execute()`.
+    Keep it as plain loops — no comprehensions beyond the simple filter above. This complements item 1 (event-count sync): the calendar row is gone, so its `events` list doesn't need cleanup.
+
+---
+
 ## UI / UX
 
 - [ ] **Format timestamps in local timezone across all user pages**
