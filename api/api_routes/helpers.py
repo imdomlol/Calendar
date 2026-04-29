@@ -6,5 +6,4 @@ def makeUser() -> User:
     return User(
         userId=g.user["id"],
         displayName=g.user.get("display_name", ""),
-        email=g.user.get("email", "")
     )

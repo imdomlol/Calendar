@@ -3,10 +3,9 @@ from typing import Any
 
 
 class User():
-    def __init__(self, userId: str, displayName: str, email: str) -> None:
+    def __init__(self, userId: str, displayName: str) -> None:
         self.userId = userId
         self.displayName = displayName
-        self.email = email
 
     # -------------------------
     # Calendar stuff
@@ -72,17 +71,23 @@ class User():
         result = db.table("users").select("id, email, display_name").in_("id", friendIds).execute()
         return result.data or []
 
-    def addFriend(self, friendId: str = None, email: str = None) -> list:
-        # if no friendId given but email is, look up the user by email
+    def addFriend(self, friendId: str = None, email: str = None, value: str = None) -> list:
+        # resolve friendId from email, display_name, or treat the raw value as an id
         db = get_supabase_client()
-        if friendId is None and email is not None:
-            result = db.table("users").select("id").eq("email", email).execute()
-            if not result.data:
-                raise ValueError("No user found with that email")
-            friendId = result.data[0]["id"]
+        lookup = email or value
+        if friendId is None and lookup is not None:
+            r = db.table("users").select("id").eq("email", lookup).limit(1).execute()
+            if r.data:
+                friendId = r.data[0]["id"]
+            else:
+                r = db.table("users").select("id").eq("display_name", lookup).limit(1).execute()
+                if r.data:
+                    friendId = r.data[0]["id"]
+                else:
+                    friendId = lookup
 
         if friendId is None:
-            raise ValueError("friend_id or email is required")
+            raise ValueError("friend_id, email, or display name is required")
 
         # cant add yourself
         if friendId == self.userId:

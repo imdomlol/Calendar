@@ -104,7 +104,7 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ## Architecture / Cleanup
 
-- [ ] **Refactor admin role to `is_admin` column on `users` table**
+- [x] **Refactor admin role to `is_admin` column on `users` table**
   Replace the current manual `app_metadata` edit in Supabase with a dedicated `is_admin` boolean column. Update `@ui_admin_required` and the session user dict (set at login in `auth.py`) to read from this column. Add an admin UI action to promote/demote users so it no longer requires direct DB access.
   - **Plan:**
     1. SQL migration (run manually in Supabase): `ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;`

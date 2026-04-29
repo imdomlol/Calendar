@@ -104,7 +104,7 @@ function addEvent() {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not create event.');
+            r.json().then(function(data) { alert(data.error || 'Could not create event.'); });
         }
     });
 }
@@ -115,7 +115,7 @@ function deleteEvent(eventId) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not delete event.');
+            r.json().then(function(data) { alert(data.error || 'Could not delete event.'); });
         }
     });
 }

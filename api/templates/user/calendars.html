@@ -97,7 +97,8 @@
         <div class="tab-content" id="guest-{{ cal.id }}" style="display:none;">
           {% if cal.guest_link_active and cal.guest_link_token %}
             <p class="muted" style="font-size:12px; word-break:break-all; margin-bottom:4px;">
-              {{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}
+              <span id="link-{{ cal.id }}">{{ app_base_url }}{{ url_for('ui.public_calendar', token=cal.guest_link_token) }}</span>
+              <button onclick="copyLink('{{ cal.id }}')" class="btn btn-sm" style="border:none; cursor:pointer; margin-left:4px; margin-top:0;">Copy</button>
             </p>
             <p class="muted" style="font-size:12px;">Role: {{ cal.guest_link_role or 'viewer' }}</p>
           {% else %}
@@ -109,12 +110,12 @@
               <option value="editor">Editor</option>
             </select>
             <button onclick="generateGuestLink('{{ cal.id }}')" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">
-              {% if cal.guest_link_active %}Rotate Link{% else %}Generate Link{% endif %}
+              {% if cal.guest_link_active %}Rotate{% else %}Generate Link{% endif %}
             </button>
+            {% if cal.guest_link_active and cal.guest_link_token %}
+            <button onclick="revokeGuestLink('{{ cal.id }}')" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:0;">Revoke</button>
+            {% endif %}
           </div>
-          {% if cal.guest_link_active and cal.guest_link_token %}
-            <button onclick="revokeGuestLink('{{ cal.id }}')" class="btn danger btn-sm" style="border:none; cursor:pointer; margin-top:6px;">Revoke Link</button>
-          {% endif %}
         </div>
         <div class="tab-content" id="members-{{ cal.id }}" style="display:none;">
           {% if cal.member_ids and cal.member_ids|length > 0 %}
@@ -127,6 +128,10 @@
           {% else %}
             <p class="muted" style="font-size:13px;">No members yet.</p>
           {% endif %}
+          <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+            <input type="text" id="add-member-{{ cal.id }}" placeholder="email or user ID" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; flex:1;">
+            <button onclick="addMember('{{ cal.id }}')" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Add</button>
+          </div>
         </div>
       </div>
     {% endfor %}
@@ -135,6 +140,30 @@
 
 
 <script>
+function copyLink(id) {
+    var text = document.getElementById('link-' + id).innerText;
+    navigator.clipboard.writeText(text);
+}
+
+function addMember(calId) {
+    var value = document.getElementById('add-member-' + calId).value.trim();
+    if (!value) {
+        alert('Please enter an email or user ID.');
+        return;
+    }
+    fetch('/ui/calendars/' + calId + '/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member: value })
+    }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            r.json().then(function(data) { alert(data.error || 'Could not add member.'); });
+        }
+    });
+}
+
 function createCalendar() {
     var name = document.getElementById('new-cal-name').value.trim();
     if (!name) {
@@ -149,7 +178,7 @@ function createCalendar() {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not create calendar.');
+            r.json().then(function(data) { alert(data.error || 'Could not create calendar.'); });
         }
     });
 }
@@ -160,7 +189,7 @@ function deleteCalendar(calId, calName) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not delete calendar.');
+            r.json().then(function(data) { alert(data.error || 'Could not delete calendar.'); });
         }
     });
 }
@@ -175,7 +204,7 @@ function generateGuestLink(calId) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not generate guest link.');
+            r.json().then(function(data) { alert(data.error || 'Could not generate guest link.'); });
         }
     });
 }
@@ -186,7 +215,7 @@ function revokeGuestLink(calId) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not revoke guest link.');
+            r.json().then(function(data) { alert(data.error || 'Could not revoke guest link.'); });
         }
     });
 }

@@ -68,7 +68,7 @@ function saveEvent(eventId) {
         if (r.ok) {
             window.location.href = '/ui/user/events';
         } else {
-            alert('Could not save event.');
+            r.json().then(function(data) { alert(data.error || 'Could not save event.'); });
         }
     });
 }

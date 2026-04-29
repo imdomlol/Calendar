@@ -1,6 +1,6 @@
 import secrets
 from datetime import datetime, timedelta
-from flask import abort, redirect, request, url_for, jsonify
+from flask import redirect, request, url_for, jsonify
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
     _ui_user,
@@ -9,6 +9,7 @@ from api.ui_routes.helpers import (
     ui_login_required,
     user_nav,
     _resolve_app_base_url,
+    resolve_member_id,
 )
 from models.calendar import Calendar
 from models.event import Event
@@ -146,11 +147,11 @@ def create_event():
     title = body.get("title")
     calendarIds = body.get("calendar_ids", [])
     if not title or not calendarIds:
-        abort(400)
+        return jsonify({"error": "title and calendar_ids are required"}), 400
     user = _make_ui_user()
     userCalIds = [cal["id"] for cal in user.listCalendars()]
     if not any(cid in userCalIds for cid in calendarIds):
-        abort(403)
+        return jsonify({"error": "not authorized for any of the given calendars"}), 403
     event = Event(
         title=title,
         calendarIds=calendarIds,
@@ -169,12 +170,12 @@ def update_event(event_id):
     db = get_supabase_client()
     result = db.table("events").select("*").eq("id", event_id).execute()
     if not result.data:
-        abort(404)
+        return jsonify({"error": "event not found"}), 404
     eventData = result.data[0]
     user = _make_ui_user()
     userCalIds = [cal["id"] for cal in user.listCalendars()]
     if not any(cid in userCalIds for cid in eventData.get("calendar_ids", [])):
-        abort(403)
+        return jsonify({"error": "not authorized to edit this event"}), 403
     body = request.get_json(silent=True) or {}
     title = body.get("title")
     description = body.get("description")
@@ -182,7 +183,7 @@ def update_event(event_id):
     endTimestamp = body.get("end_timestamp")
     calendarIds = body.get("calendar_ids")
     if all(v is None for v in [title, description, startTimestamp, endTimestamp, calendarIds]):
-        abort(400)
+        return jsonify({"error": "no fields to update"}), 400
     event = Event(title=eventData["title"], calendarIds=eventData["calendar_ids"], ownerId=eventData["owner_id"])
     event.id = event_id
     editResult = event.edit(
@@ -201,12 +202,12 @@ def delete_event(event_id):
     db = get_supabase_client()
     result = db.table("events").select("*").eq("id", event_id).execute()
     if not result.data:
-        abort(404)
+        return jsonify({"error": "event not found"}), 404
     eventData = result.data[0]
     user = _make_ui_user()
     userCalIds = [cal["id"] for cal in user.listCalendars()]
     if not any(cid in userCalIds for cid in eventData.get("calendar_ids", [])):
-        abort(403)
+        return jsonify({"error": "not authorized to delete this event"}), 403
     event = Event(title=eventData["title"], calendarIds=eventData["calendar_ids"])
     event.id = event_id
     event.remove()
@@ -219,7 +220,7 @@ def create_calendar():
     body = request.get_json(silent=True) or {}
     name = body.get("name")
     if not name:
-        abort(400)
+        return jsonify({"error": "name is required"}), 400
     uid = _ui_user()["id"]
     cal = Calendar(name=name, ownerId=uid)
     result = cal.save()
@@ -233,7 +234,7 @@ def delete_calendar(calendar_id):
     uid = _ui_user()["id"]
     existing = db.table("calendars").select("id", "name", "owner_id").eq("id", calendar_id).eq("owner_id", uid).execute()
     if not existing.data:
-        abort(404)
+        return jsonify({"error": "calendar not found or not owned by you"}), 404
     calData = existing.data[0]
     cal = Calendar(name=calData["name"], ownerId=calData["owner_id"])
     cal.id = calendar_id
@@ -248,11 +249,11 @@ def create_guest_link(calendar_id):
     uid = _ui_user()["id"]
     existing = db.table("calendars").select("id").eq("id", calendar_id).eq("owner_id", uid).execute()
     if not existing.data:
-        abort(404)
+        return jsonify({"error": "calendar not found or not owned by you"}), 404
     body = request.get_json(silent=True) or {}
     role = body.get("role", "viewer")
     if role not in ("viewer", "editor"):
-        abort(400)
+        return jsonify({"error": "role must be viewer or editor"}), 400
     token = secrets.token_urlsafe(32)
     result = db.table("calendars").update({
         "guest_link_token": token,
@@ -269,7 +270,7 @@ def revoke_guest_link(calendar_id):
     uid = _ui_user()["id"]
     existing = db.table("calendars").select("id").eq("id", calendar_id).eq("owner_id", uid).execute()
     if not existing.data:
-        abort(404)
+        return jsonify({"error": "calendar not found or not owned by you"}), 404
     db.table("calendars").update({
         "guest_link_token": None,
         "guest_link_role": None,
@@ -284,9 +285,9 @@ def add_friend():
     body = request.get_json(silent=True) or {}
     user = _make_ui_user()
     try:
-        friends = user.addFriend(friendId=body.get("friend_id"), email=body.get("email"))
-    except ValueError:
-        abort(400)
+        friends = user.addFriend(friendId=body.get("friend_id"), email=body.get("email"), value=body.get("value"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify({"friends": friends})
 
 
@@ -296,8 +297,8 @@ def remove_friend(friend_id):
     user = _make_ui_user()
     try:
         user.removeFriend(friend_id)
-    except ValueError:
-        abort(404)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     return "", 204
 
 
@@ -309,6 +310,32 @@ def delete_me():
     return "", 204
 
 
+@ui_bp.route("/calendars/<calendar_id>/members", methods=["POST"])
+@ui_login_required
+def add_calendar_member(calendar_id):
+    db = get_supabase_client()
+    uid = _ui_user()["id"]
+    existing = db.table("calendars").select("id, name, owner_id, member_ids").eq("id", calendar_id).eq("owner_id", uid).execute()
+    if not existing.data:
+        return jsonify({"error": "calendar not found or not owned by you"}), 404
+    body = request.get_json(silent=True) or {}
+    value = (body.get("member") or "").strip()
+    if not value:
+        return jsonify({"error": "member is required"}), 400
+    member_id = resolve_member_id(value)
+    if not member_id:
+        return jsonify({"error": "no user found with that email"}), 404
+    cal_data = existing.data[0]
+    cal = Calendar(name=cal_data["name"], ownerId=cal_data["owner_id"])
+    cal.id = calendar_id
+    cal.memberIds = cal_data.get("member_ids") or [cal_data["owner_id"]]
+    try:
+        cal.add_member(member_id)
+    except (ValueError, Exception) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True}), 200
+
+
 @ui_bp.route("/settings/external/<external_id>", methods=["DELETE"])
 @ui_login_required
 def disconnect_external(external_id):
@@ -317,6 +344,6 @@ def disconnect_external(external_id):
     ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
     try:
         ext.remove(external_id)
-    except ValueError:
-        abort(404)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
     return "", 204

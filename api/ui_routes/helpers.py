@@ -41,7 +41,6 @@ BUILD_INFO = _compute_build_info()
 
 
 placeholder_friends = ["Jamie", "Morgan", "Taylor"]
-placeholder_externals = ["Google Calendar", "Outlook Calendar"]
 placeholder_logs = [
     "[INFO] User Alice synced Google Calendar",
     "[WARN] Failed login attempt detected",
@@ -102,8 +101,8 @@ def ui_admin_required(view_func):
             # not logged in, send them to the login page
             return redirect(url_for("ui.login", next=request.path))
         # they are logged in, now check if they are an admin
-        # we stored the role in the session when they logged in
-        if usr.get("role") != "admin":
+        # is_admin is set from the users table at login
+        if not usr.get("is_admin"):
             # they are logged in but not an admin
             # 403 means "you dont have permission to see this"
             abort(403)
@@ -254,6 +253,7 @@ def admin_nav():
         {"label": "Notifications", "href": url_for("ui.send_notification")},
         {"label": "Suspend User", "href": url_for("ui.suspend_user")},
         {"label": "Unlink External Calendars", "href": url_for("ui.admin_unlink")},
+        {"label": "Manage Users", "href": url_for("ui.admin_users")},
     ]
 
 
@@ -273,8 +273,18 @@ def _make_ui_user() -> User:
     return User(
         userId=usr["id"],
         displayName=usr.get("display_name", ""),
-        email=usr.get("email", ""),
     )
+
+
+def resolve_member_id(value: str):
+    from utils.supabase_client import get_supabase_client
+    db = get_supabase_client()
+    if "@" in value:
+        result = db.table("users").select("id").eq("email", value).limit(1).execute()
+        if result.data:
+            return result.data[0]["id"]
+        return None
+    return value
 
 
 from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular import

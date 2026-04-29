@@ -85,10 +85,8 @@ class External:
         new_access_token = new_tokens.get("access_token")
         if not new_access_token:
             return None
-        update_data: dict = {"access_token": new_access_token}
-        if new_tokens.get("refresh_token"):
-            update_data["refresh_token"] = new_tokens["refresh_token"]
-        self.supabaseClient.table("externals").update(update_data).eq("id", ext_data["id"]).execute()
+        new_refresh_token = new_tokens.get("refresh_token") or None
+        self.updateTokens(ext_data["id"], ext_data.get("user_id"), new_access_token, new_refresh_token)
         return new_access_token
 
     def pullCalData(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
@@ -140,6 +138,7 @@ class External:
                 if e.get("description"):
                     row["description"] = e["description"]
                 rows.append(row)
+            db.table("events").delete().contains("calendar_ids", [calId]).execute()
             if rows:
                 db.table("events").insert(rows).execute()
             return {"inserted": len(rows)}
@@ -192,6 +191,7 @@ class External:
                 if body_content:
                     row["description"] = body_content
                 rows.append(row)
+            db.table("events").delete().contains("calendar_ids", [calId]).execute()
             if rows:
                 db.table("events").insert(rows).execute()
             return {"inserted": len(rows)}

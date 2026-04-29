@@ -37,8 +37,15 @@ class Calendar:
         return db.table("calendars").insert(self.to_record()).execute()
 
     def remove(self) -> Any:
-        # delete this calendar from the database
+        # delete this calendar from the database; clean up orphaned events first
         db = get_supabase_client()
+        events_result = db.table("events").select("id, calendar_ids").contains("calendar_ids", [self.id]).execute()
+        for row in (events_result.data or []):
+            remaining = [c for c in (row.get("calendar_ids") or []) if c != self.id]
+            if remaining:
+                db.table("events").update({"calendar_ids": remaining}).eq("id", row["id"]).execute()
+            else:
+                db.table("events").delete().eq("id", row["id"]).execute()
         return db.table("calendars").delete().eq("id", self.id).execute()
 
     def add_member(self, newMember: str) -> Any:

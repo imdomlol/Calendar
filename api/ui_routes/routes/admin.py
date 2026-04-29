@@ -1,6 +1,7 @@
 from flask import jsonify, request
 from api.ui_routes import ui_bp
-from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav, placeholder_externals
+from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav
+from utils.supabase_client import get_supabase_client
 from utils.logger import get_logger_client
 
 
@@ -104,11 +105,32 @@ def send_notification():
 def suspend_user():
     return render_page("Suspend User", "admin", admin_nav(), "admin/suspend.html")
 
+@ui_bp.route("/admin/users")
+@ui_admin_required
+def admin_users():
+    db = get_supabase_client()
+    result = db.table("users").select("id, email, display_name, is_admin").execute()
+    users = result.data or []
+    return render_page("Manage Users", "admin", admin_nav(), "admin/users.html", users=users)
+
+
+@ui_bp.route("/admin/users/<user_id>/toggle-admin", methods=["POST"])
+@ui_admin_required
+def admin_toggle_admin(user_id):
+    db = get_supabase_client()
+    current = db.table("users").select("is_admin").eq("id", user_id).limit(1).execute()
+    if not current.data:
+        return jsonify({"error": "User not found"}), 404
+    new_val = not bool(current.data[0].get("is_admin", False))
+    db.table("users").update({"is_admin": new_val}).eq("id", user_id).execute()
+    return jsonify({"is_admin": new_val})
+
+
 @ui_bp.route("/admin/unlink")
 @ui_admin_required
 def admin_unlink():
-    # get providers list for unlink page
-    provs = placeholder_externals
-    # pass the providers to the template so the admin can pick one to unlink
+    db = get_supabase_client()
+    result = db.table("externals").select("id, provider, user_id, url").execute()
+    externals = result.data or []
     return render_page("Unlink External Calendars", "admin", admin_nav(), "admin/unlink.html",
-                       providers=provs)
+                       externals=externals)

@@ -6,12 +6,36 @@
   <p class="muted">Admin action for external calendar disconnection.</p>
 </div>
 <div class="card">
-  <h4>Linked providers</h4>
-  <ul>
-    {% for name in providers %}
-      <li>{{ name }}</li>
+  <h4>Linked external calendars</h4>
+  {% if externals %}
+  <table>
+    <tr><th>Provider</th><th>User ID</th><th>URL</th><th>Action</th></tr>
+    {% for ext in externals %}
+    <tr>
+      <td>{{ ext.provider }}</td>
+      <td>{{ ext.user_id }}</td>
+      <td>{{ ext.url }}</td>
+      <td>
+        <button class="btn danger btn-sm" onclick="unlinkExternal('{{ ext.id }}')">Unlink</button>
+      </td>
+    </tr>
     {% endfor %}
-  </ul>
-  <a class="btn danger" href="{{ url_for('ui.dashboard', role='admin') }}">Unlink All</a>
+  </table>
+  {% else %}
+  <p class="muted">No external calendars linked.</p>
+  {% endif %}
 </div>
+
+<script>
+function unlinkExternal(extId) {
+    if (!confirm('Unlink this external calendar? This cannot be undone.')) return;
+    fetch('/ui/settings/external/' + extId, { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            r.json().then(function(data) { alert(data.error || 'Could not unlink external calendar.'); });
+        }
+    });
+}
+</script>
 {% endblock %}

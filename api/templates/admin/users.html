@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+  <h1>Manage Users</h1>
+  <p class="muted">Promote or demote admin access for any user.</p>
+</div>
+<div class="card">
+  <h4>All users</h4>
+  {% if users %}
+  <table>
+    <tr><th>Email</th><th>Display Name</th><th>Admin?</th><th>Action</th></tr>
+    {% for u in users %}
+    <tr id="row-{{ u.id }}">
+      <td>{{ u.email or '—' }}</td>
+      <td>{{ u.display_name or '—' }}</td>
+      <td id="status-{{ u.id }}">{{ 'Yes' if u.is_admin else 'No' }}</td>
+      <td>
+        <button class="btn btn-sm" onclick="toggleAdmin('{{ u.id }}')">
+          {{ 'Demote' if u.is_admin else 'Promote' }}
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No users found.</p>
+  {% endif %}
+</div>
+
+<script>
+function toggleAdmin(userId) {
+    fetch('/ui/admin/users/' + userId + '/toggle-admin', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            var statusEl = document.getElementById('status-' + userId);
+            var btn = statusEl.parentElement.querySelector('button');
+            if (data.is_admin) {
+                statusEl.textContent = 'Yes';
+                btn.textContent = 'Demote';
+            } else {
+                statusEl.textContent = 'No';
+                btn.textContent = 'Promote';
+            }
+        })
+        .catch(function() { alert('Could not update admin status.'); });
+}
+</script>
+{% endblock %}

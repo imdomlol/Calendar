@@ -67,14 +67,23 @@ def login():
                     # get the role from app_meta, if its not there just use "user" as the default
                     role = app_meta.get("role", "user")
 
+                    # check the is_admin column on the users table
+                    is_admin = False
+                    try:
+                        admin_result = calDb.table("users").select("is_admin").eq("id", uid).limit(1).execute()
+                        if admin_result.data:
+                            is_admin = bool(admin_result.data[0].get("is_admin", False))
+                    except Exception:
+                        pass
+
                     # save the user info to the flask session
                     # this is how we remember who is logged in between requests
-                    # we now also save the role so we can check it on every page
                     session["ui_user"] = {
                         "id": uid,
                         "email": getattr(user_obj, "email", email),
                         "access_token": access_tok,
                         "role": role,
+                        "is_admin": is_admin,
                     }
                     logEvent("INFO", "auth", "login successful", userId=uid, details="email: " + email)
                     # send them to wherever they were trying to go

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="hero">
   <h1>Friends</h1>
-  <p class="muted">Add friends by email to share calendars with them.</p>
+  <p class="muted">Add friends by email, display name, or user ID.</p>
 </div>
 
 {{ status_banner(status, message) }}
@@ -13,7 +13,7 @@
   <div class="card">
     <h4>Add Friend</h4>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-      <input id="friend-email" type="email" placeholder="Friend's email address"
+      <input id="friend-email" type="text" placeholder="email, display name, or user ID"
              style="padding:10px; border:1px solid #cbd5e1; border-radius:10px; min-width:220px;" />
       <button onclick="addFriend()" class="btn" style="border:none; cursor:pointer; margin-top:0;">Add</button>
     </div>
@@ -44,20 +44,20 @@
 
 <script>
 function addFriend() {
-    var email = document.getElementById('friend-email').value.trim();
-    if (!email) {
-        alert('Please enter an email address.');
+    var value = document.getElementById('friend-email').value.trim();
+    if (!value) {
+        alert('Please enter an email, display name, or user ID.');
         return;
     }
     fetch('/ui/user/friends', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email })
+        body: JSON.stringify({ value: value })
     }).then(function(r) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not add friend.');
+            r.json().then(function(data) { alert(data.error || 'Could not add friend.'); });
         }
     });
 }
@@ -68,7 +68,7 @@ function removeFriend(friendId) {
         if (r.ok) {
             window.location.reload();
         } else {
-            alert('Could not remove friend.');
+            r.json().then(function(data) { alert(data.error || 'Could not remove friend.'); });
         }
     });
 }
