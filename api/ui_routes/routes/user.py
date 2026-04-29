@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timedelta
 from flask import abort, redirect, request, url_for, jsonify
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
@@ -82,6 +83,9 @@ def manage_events():
     if not calendars:
         return render_page("Manage Events", "user", user_nav(), "user/events_no_calendars.html",
                            status=status, message=message)
+    now = datetime.now()
+    default_start = now.strftime("%Y-%m-%dT%H:%M")
+    default_end = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
     return render_page(
         "Manage Events", "user", user_nav(), "user/events.html",
         status=status,
@@ -89,6 +93,8 @@ def manage_events():
         calendars=calendars,
         selected_calendar_id=selected_calendar_id,
         events=events,
+        default_start=default_start,
+        default_end=default_end,
     )
 
 

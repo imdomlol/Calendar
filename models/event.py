@@ -38,13 +38,49 @@ class Event:
 
     def save(self) -> Any:
         db = get_supabase_client()
-        return db.table("events").insert(self.to_record()).execute()
+        result = db.table("events").insert(self.to_record()).execute()
+        rows = result.data or []
+        if rows:
+            newId = rows[0].get("id")
+            self.id = newId
+            Event._addEventToCalendars(newId, self.calendarIds or [])
+        return result
 
     def remove(self) -> Any:
         if self.id is None:
             raise ValueError("Event must be saved before it can be removed")
         db = get_supabase_client()
-        return db.table("events").delete().match({"id": self.id}).execute()
+        result = db.table("events").delete().match({"id": self.id}).execute()
+        Event._removeEventFromCalendars(self.id, self.calendarIds or [])
+        return result
+
+    @staticmethod
+    def _addEventToCalendars(eventId, calIds) -> None:
+        if not eventId or not calIds:
+            return
+        db = get_supabase_client()
+        for calId in calIds:
+            row = db.table("calendars").select("events").eq("id", calId).limit(1).execute()
+            if not row.data:
+                continue
+            current = row.data[0].get("events") or []
+            if eventId not in current:
+                current.append(eventId)
+                db.table("calendars").update({"events": current}).eq("id", calId).execute()
+
+    @staticmethod
+    def _removeEventFromCalendars(eventId, calIds) -> None:
+        if not eventId or not calIds:
+            return
+        db = get_supabase_client()
+        for calId in calIds:
+            row = db.table("calendars").select("events").eq("id", calId).limit(1).execute()
+            if not row.data:
+                continue
+            current = row.data[0].get("events") or []
+            if eventId in current:
+                current.remove(eventId)
+                db.table("calendars").update({"events": current}).eq("id", calId).execute()
 
     @staticmethod
     def find(eventId: str) -> dict | None:
@@ -70,4 +106,13 @@ class Event:
         if calendarIds is not None:
             updates["calendar_ids"] = calendarIds
         db = get_supabase_client()
-        return db.table("events").update(updates).match({"id": self.id}).execute()
+        result = db.table("events").update(updates).match({"id": self.id}).execute()
+        if calendarIds is not None:
+            oldIds = self.calendarIds or []
+            newIds = calendarIds or []
+            toAdd = [c for c in newIds if c not in oldIds]
+            toRemove = [c for c in oldIds if c not in newIds]
+            Event._addEventToCalendars(self.id, toAdd)
+            Event._removeEventFromCalendars(self.id, toRemove)
+            self.calendarIds = newIds
+        return result

@@ -1,5 +1,6 @@
 from flask import abort, request
 from api.api_routes import api_bp
+from models.event import Event
 from utils.supabase_client import get_supabase_client
 
 
@@ -40,7 +41,9 @@ def guestCreateEvent(token):
         "end_timestamp": body.get("end_timestamp") or None,
     }
     result = db.table("events").insert(pload).execute()
-    return result.data[0], 201
+    newRow = result.data[0]
+    Event._addEventToCalendars(newRow.get("id"), newRow.get("calendar_ids") or [])
+    return newRow, 201
 
 
 @api_bp.route("/guest/<token>/events/<event_id>", methods=["PUT"])
@@ -90,5 +93,10 @@ def guestDeleteEvent(token, event_id):
     )
     if not existing.data:
         abort(404)
+    full = db.table("events").select("calendar_ids").eq("id", event_id).limit(1).execute()
+    eventCalIds = []
+    if full.data:
+        eventCalIds = full.data[0].get("calendar_ids") or []
     db.table("events").delete().eq("id", event_id).execute()
+    Event._removeEventFromCalendars(event_id, eventCalIds)
     return "", 204

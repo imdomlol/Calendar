@@ -76,6 +76,8 @@ def createEventsBulk():
         return {"created": 0}, 200
 
     result = db.table("events").insert(payloads).execute()
+    for row in result.data or []:
+        Event._addEventToCalendars(row.get("id"), row.get("calendar_ids") or [])
     return {"created": len(result.data or [])}, 201
 
 
