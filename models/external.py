@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta, timezone
+from random import randint
 import requests
 from typing import Any
+from uuid import uuid4
 from utils.logger import logEvent
 
 
@@ -7,45 +10,216 @@ class External:
     def __init__(
         self,
         id: str | None,
-        url: str,
-        provider: str,
         supabaseClient: Any,
-        userId: str | None = None,
-        accessToken: str | None = None,
-        refreshToken: str | None = None,
+        userId: str,
     ) -> None:
         self.id = id
-        self.url = url
-        self.provider = provider
         self.userId = userId
-        self.accessToken = accessToken
-        self.refreshToken = refreshToken
         self.supabaseClient = supabaseClient
 
-    def to_record(self) -> dict[str, Any]:
-        # build a dict with column names matching the externals table in supabase
-        rec = {
-            "url": self.url,
-            "provider": self.provider,
+    def save(self, url: str, provider: str, accessToken: str | None = None, refreshToken: str | None = None) -> Any:
+        # insert this external connection into the database
+        record = {
+            "url": url,
+            "provider": provider,
             "user_id": self.userId,
-            "access_token": self.accessToken,
-            "refresh_token": self.refreshToken,
+            "access_token": accessToken,
+            "refresh_token": refreshToken,
         }
         if self.id is not None:
-            rec["id"] = self.id
-        return rec
-
-    def save(self) -> Any:
-        # insert this external connection into the database
-        record = self.to_record()
+            record["id"] = self.id
         return self.supabaseClient.table("externals").insert(record).execute()
+
+    def findForUserProvider(self, provider: str, url: str):
+        db = self.supabaseClient
+        result = db.table("externals").select("*").eq("user_id", self.userId).eq("provider", provider).eq("url", url).limit(1).execute()
+        if result.data:
+            return result.data[0]
+        return None
+
+    def updateSubscription(self, externalId: str, userId: str, subscriptionId: str | None, subscriptionExpires: str | None, resourceId: str | None = None) -> Any:
+        db = self.supabaseClient
+        updateData = {}
+        updateData["subscription_id"] = subscriptionId
+        updateData["subscription_expires"] = subscriptionExpires
+        updateData["resource_id"] = resourceId
+        return db.table("externals").update(updateData).eq("id", externalId).eq("user_id", userId).execute()
+
+    def _subscription_url(self, appBaseUrl: str, provider: str) -> str:
+        cleanBaseUrl = appBaseUrl.strip().rstrip("/")
+        if provider == "google":
+            return cleanBaseUrl + "/api/webhooks/google"
+        return cleanBaseUrl + "/api/webhooks/outlook"
+
+    def registerSubscription(self, externalId: str, appBaseUrl: str, clientId: str = "", clientSecret: str = "") -> Any:
+        db = self.supabaseClient
+        result = db.table("externals").select("*").eq("id", externalId).eq("user_id", self.userId).limit(1).execute()
+        if not result.data:
+            raise ValueError("External not found or not owned by user")
+        extData = result.data[0]
+        provider = (extData.get("provider") or "").lower()
+        if provider == "google":
+            return self._registerGoogleSubscription(extData, appBaseUrl, clientId, clientSecret)
+        if provider == "outlook":
+            return self._registerOutlookSubscription(extData, appBaseUrl, clientId, clientSecret)
+        raise ValueError("Provider does not support webhooks")
+
+    def _registerGoogleSubscription(self, extData: dict, appBaseUrl: str, clientId: str, clientSecret: str) -> Any:
+        accessToken = extData.get("access_token")
+        externalId = extData.get("id")
+        userId = extData.get("user_id")
+        if not accessToken:
+            raise ValueError("Google access token is missing")
+        channelId = str(uuid4())
+        address = self._subscription_url(appBaseUrl, "google")
+        body = {
+            "id": channelId,
+            "type": "web_hook",
+            "address": address,
+            "token": externalId,
+        }
+        headers = {
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/json",
+        }
+        url = "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch"
+        response = requests.post(url, headers=headers, json=body)
+        if response.status_code == 401:
+            newToken = self._refresh_access_token(extData, clientId, clientSecret)
+            if newToken:
+                extData["access_token"] = newToken
+                headers["Authorization"] = "Bearer " + newToken
+                response = requests.post(url, headers=headers, json=body)
+        if response.status_code not in (200, 201):
+            logEvent("ERROR", "webhook_subscription", "Google subscription registration failed",
+                     userId=userId, details={"external_id": externalId, "status_code": response.status_code})
+            raise RuntimeError("Google subscription registration failed")
+        data = response.json()
+        expires = None
+        expiration = data.get("expiration")
+        if expiration:
+            expiresAt = datetime.fromtimestamp(int(expiration) / 1000, timezone.utc)
+            expires = expiresAt.isoformat()
+        subscriptionId = data.get("id")
+        resourceId = data.get("resourceId")
+        self.updateSubscription(externalId, userId, subscriptionId, expires, resourceId)
+        self.stopSubscription(extData)
+        logEvent("INFO", "webhook_subscription", "Google subscription registered",
+                 userId=userId, details={"external_id": externalId, "subscription_id": subscriptionId})
+        return data
+
+    def _registerOutlookSubscription(self, extData: dict, appBaseUrl: str, clientId: str, clientSecret: str) -> Any:
+        accessToken = extData.get("access_token")
+        externalId = extData.get("id")
+        userId = extData.get("user_id")
+        if not accessToken:
+            raise ValueError("Outlook access token is missing")
+        jitterMinutes = randint(0, 120)
+        expiresAt = datetime.now(timezone.utc) + timedelta(days=2, hours=23) - timedelta(minutes=jitterMinutes)
+        expires = expiresAt.isoformat().replace("+00:00", "Z")
+        address = self._subscription_url(appBaseUrl, "outlook")
+        body = {
+            "changeType": "created,updated,deleted",
+            "notificationUrl": address,
+            "resource": "me/events",
+            "expirationDateTime": expires,
+            "clientState": externalId,
+        }
+        headers = {
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/json",
+        }
+        response = requests.post("https://graph.microsoft.com/v1.0/subscriptions", headers=headers, json=body)
+        if response.status_code == 401:
+            newToken = self._refresh_access_token(extData, clientId, clientSecret)
+            if newToken:
+                extData["access_token"] = newToken
+                headers["Authorization"] = "Bearer " + newToken
+                response = requests.post("https://graph.microsoft.com/v1.0/subscriptions", headers=headers, json=body)
+        if response.status_code not in (200, 201):
+            logEvent("ERROR", "webhook_subscription", "Outlook subscription registration failed",
+                     userId=userId, details={"external_id": externalId, "status_code": response.status_code})
+            raise RuntimeError("Outlook subscription registration failed")
+        data = response.json()
+        subscriptionId = data.get("id")
+        subscriptionExpires = data.get("expirationDateTime") or expires
+        self.updateSubscription(externalId, userId, subscriptionId, subscriptionExpires, None)
+        self.stopSubscription(extData)
+        logEvent("INFO", "webhook_subscription", "Outlook subscription registered",
+                 userId=userId, details={"external_id": externalId, "subscription_id": subscriptionId})
+        return data
+
+    def stopSubscription(self, extData: dict) -> None:
+        provider = (extData.get("provider") or "").lower()
+        if provider == "google":
+            self._stopGoogleSubscription(extData)
+        elif provider == "outlook":
+            self._stopOutlookSubscription(extData)
+
+    def _stopGoogleSubscription(self, extData: dict) -> None:
+        subscriptionId = extData.get("subscription_id")
+        resourceId = extData.get("resource_id")
+        accessToken = extData.get("access_token")
+        if not subscriptionId or not resourceId or not accessToken:
+            return
+        headers = {
+            "Authorization": "Bearer " + accessToken,
+            "Content-Type": "application/json",
+        }
+        body = {
+            "id": subscriptionId,
+            "resourceId": resourceId,
+        }
+        response = requests.post("https://www.googleapis.com/calendar/v3/channels/stop", headers=headers, json=body)
+        if response.status_code not in (200, 204):
+            logEvent("WARNING", "webhook_subscription", "Google subscription stop failed",
+                     userId=extData.get("user_id"),
+                     details={"external_id": extData.get("id"), "status_code": response.status_code})
+
+    def _stopOutlookSubscription(self, extData: dict) -> None:
+        subscriptionId = extData.get("subscription_id")
+        accessToken = extData.get("access_token")
+        if not subscriptionId or not accessToken:
+            return
+        headers = {
+            "Authorization": "Bearer " + accessToken,
+        }
+        url = "https://graph.microsoft.com/v1.0/subscriptions/" + subscriptionId
+        response = requests.delete(url, headers=headers)
+        if response.status_code not in (200, 202, 204, 404):
+            logEvent("WARNING", "webhook_subscription", "Outlook subscription stop failed",
+                     userId=extData.get("user_id"),
+                     details={"external_id": extData.get("id"), "status_code": response.status_code})
+
+    def pullWebhookData(self, externalId: str, googleClientId: str, googleClientSecret: str, outlookClientId: str, outlookClientSecret: str) -> Any:
+        db = self.supabaseClient
+        result = db.table("externals").select("*").eq("id", externalId).limit(1).execute()
+        if not result.data:
+            raise ValueError("External not found")
+        extData = result.data[0]
+        provider = (extData.get("provider") or "").lower()
+        if provider == "google":
+            clientId = googleClientId
+            clientSecret = googleClientSecret
+        elif provider == "outlook":
+            clientId = outlookClientId
+            clientSecret = outlookClientSecret
+        else:
+            raise ValueError("Provider does not support webhooks")
+        worker = External(id=externalId, supabaseClient=db, userId=extData.get("user_id"))
+        return worker.pullCalData(externalId, client_id=clientId, client_secret=clientSecret)
     
     def remove(self, externalId: str) -> Any:
         # delete this external connection, but only if it belongs to this user
         db = self.supabaseClient
-        existing = db.table("externals").select("id").eq("id", externalId).eq("user_id", self.userId).execute()
+        existing = db.table("externals").select("*").eq("id", externalId).eq("user_id", self.userId).execute()
         if not existing.data:
             raise ValueError("External not found or not owned by user")
+        try:
+            self.stopSubscription(existing.data[0])
+        except Exception as err:
+            logEvent("WARNING", "webhook_subscription", "Could not stop subscription before unlink",
+                     userId=self.userId, details={"external_id": externalId, "error": str(err)})
         return db.table("externals").delete().eq("id", externalId).execute()
 
     def updateTokens(self, externalId: str, userId: str, accessToken: str = None, refreshToken: str = None) -> Any:

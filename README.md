@@ -81,6 +81,14 @@ This project expects:
 
 - `SUPABASE_URL`
 - `SUPABASE_KEY`
+- `SUPABASE_SECRET_API_KEY`
+- `FLASK_SECRET_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `MS_CLIENT_ID`
+- `MS_CLIENT_SECRET`
+- `APP_BASE_URL`
+- `CRON_SECRET`
 
 macOS/Linux:
 
@@ -221,3 +229,23 @@ If there are merge conflicts, resolve them, then commit and push again.
 - Do not upload `.venv` to GitHub (ignored by `.gitignore`).
 - Do not commit secrets or API keys.
 - Keep commits small and focused so we can review easily.
+
+## 9) External Calendar Webhooks
+
+Google and Outlook webhooks need a public HTTPS URL. Use the Vercel deployment URL for real testing. For local testing, use a tunnel such as ngrok and set `APP_BASE_URL` to that HTTPS URL.
+
+Before enabling webhook registration, run this SQL manually in Supabase:
+
+```sql
+ALTER TABLE externals
+  ADD COLUMN subscription_id TEXT,
+  ADD COLUMN subscription_expires TIMESTAMPTZ,
+  ADD COLUMN resource_id TEXT;
+```
+
+Webhook receiver URLs:
+
+- Google: `/api/webhooks/google`
+- Outlook: `/api/webhooks/outlook`
+
+Vercel Cron calls `/api/cron/renew-subscriptions` every day. Set `CRON_SECRET` and send it as the `X-Cron-Secret` header for manual renewal checks.

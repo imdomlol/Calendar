@@ -341,7 +341,7 @@ def add_calendar_member(calendar_id):
 def disconnect_external(external_id):
     uid = _ui_user()["id"]
     db = get_supabase_client()
-    ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
+    ext = External(id=external_id, supabaseClient=db, userId=uid)
     try:
         ext.remove(external_id)
     except ValueError as e:

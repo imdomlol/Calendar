@@ -130,24 +130,27 @@ def settings_google_callback():
 
         uid = _ui_user()["id"]
         provider_url = "https://www.googleapis.com/calendar/v3"
-        existing_result = get_supabase_client().table("externals").select("*").eq("user_id", uid).eq("provider", "google").eq("url", provider_url).limit(1).execute()
-        existing = existing_result.data[0] if existing_result.data else None
 
         db = get_supabase_client()
+        app_base_url = _resolve_app_base_url()
+        lookup = External(id=None, supabaseClient=db, userId=uid)
+        existing = lookup.findForUserProvider("google", provider_url)
         if existing:
-            ext = External(id=existing["id"], url=provider_url, provider="google",
-                           supabaseClient=db, userId=uid)
+            ext = External(id=existing["id"], supabaseClient=db, userId=uid)
             ext.updateTokens(existing["id"], uid,
                              accessToken=creds.get("access_token"),
                              refreshToken=creds.get("refresh_token"))
+            ext.registerSubscription(existing["id"], app_base_url, clientId, client_secret)
             message = "Google connection refreshed."
         else:
-            ext = External(id=None, url=provider_url, provider="google",
-                           supabaseClient=db, userId=uid,
-                           accessToken=creds.get("access_token"),
-                           refreshToken=creds.get("refresh_token"))
-            result = ext.save()
-            created_id = (result.data or [{}])[0].get("id") or "new row"
+            ext = External(id=None, supabaseClient=db, userId=uid)
+            result = ext.save(url=provider_url, provider="google",
+                              accessToken=creds.get("access_token"),
+                              refreshToken=creds.get("refresh_token"))
+            created_id = (result.data or [{}])[0].get("id")
+            if not created_id:
+                raise RuntimeError("Google connection was saved without an id")
+            ext.registerSubscription(created_id, app_base_url, clientId, client_secret)
             message = f"Google connection created (id: {created_id})."
 
         _clear_oauth_session()
@@ -165,7 +168,7 @@ def settings_sync_google(external_id):
     client_id, client_secret = _google_oauth_config()
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
+        ext = External(id=external_id, supabaseClient=db, userId=uid)
         result = ext.pullCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
             return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Google")))
@@ -183,7 +186,7 @@ def settings_push_google(external_id):
     client_id, client_secret = _google_oauth_config()
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
+        ext = External(id=external_id, supabaseClient=db, userId=uid)
         result = ext.pushCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
             return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Google")))
@@ -265,24 +268,27 @@ def settings_outlook_callback():
 
         uid = _ui_user()["id"]
         provider_url = "https://graph.microsoft.com/v1.0"
-        existing_result = get_supabase_client().table("externals").select("*").eq("user_id", uid).eq("provider", "outlook").eq("url", provider_url).limit(1).execute()
-        existing = existing_result.data[0] if existing_result.data else None
 
         db = get_supabase_client()
+        app_base_url = _resolve_app_base_url()
+        lookup = External(id=None, supabaseClient=db, userId=uid)
+        existing = lookup.findForUserProvider("outlook", provider_url)
         if existing:
-            ext = External(id=existing["id"], url=provider_url, provider="outlook",
-                           supabaseClient=db, userId=uid)
+            ext = External(id=existing["id"], supabaseClient=db, userId=uid)
             ext.updateTokens(existing["id"], uid,
                              accessToken=creds.get("access_token"),
                              refreshToken=creds.get("refresh_token"))
+            ext.registerSubscription(existing["id"], app_base_url, clientId, client_secret)
             message = "Outlook connection refreshed."
         else:
-            ext = External(id=None, url=provider_url, provider="outlook",
-                           supabaseClient=db, userId=uid,
-                           accessToken=creds.get("access_token"),
-                           refreshToken=creds.get("refresh_token"))
-            result = ext.save()
-            created_id = (result.data or [{}])[0].get("id") or "new row"
+            ext = External(id=None, supabaseClient=db, userId=uid)
+            result = ext.save(url=provider_url, provider="outlook",
+                              accessToken=creds.get("access_token"),
+                              refreshToken=creds.get("refresh_token"))
+            created_id = (result.data or [{}])[0].get("id")
+            if not created_id:
+                raise RuntimeError("Outlook connection was saved without an id")
+            ext.registerSubscription(created_id, app_base_url, clientId, client_secret)
             message = f"Outlook connection created (id: {created_id})."
 
         _clear_outlook_oauth_session()
@@ -300,7 +306,7 @@ def settings_sync_outlook(external_id):
     client_id, client_secret = _outlook_oauth_config()
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
+        ext = External(id=external_id, supabaseClient=db, userId=uid)
         result = ext.pullCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
             return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Outlook")))
@@ -318,7 +324,7 @@ def settings_push_outlook(external_id):
     client_id, client_secret = _outlook_oauth_config()
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, url="", provider="", supabaseClient=db, userId=uid)
+        ext = External(id=external_id, supabaseClient=db, userId=uid)
         result = ext.pushCalData(external_id, client_id=client_id, client_secret=client_secret)
         if "error" in result:
             return redirect(url_for("ui.settings_page", status="error", message=_sync_error_message(result["error"], "Outlook")))
