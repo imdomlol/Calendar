@@ -9,27 +9,11 @@ Calendar website for 362.
 
 ## 2) Get the project on Your Computer
 
-### Option A: You have write access to this repository
+### You have write access to this repository
 
 ```bash
 git clone https://github.com/imdomlol/Calendar.git
 cd Calendar
-```
-
-### Option B: You do NOT have write access
-
-1. Fork this repository in GitHub (top-right "Fork" button).
-2. Clone your fork:
-
-```bash
-git clone https://github.com/<your-username>/Calendar.git
-cd Calendar
-```
-
-3. Add the original repository as `upstream`:
-
-```bash
-git remote add upstream https://github.com/imdomlol/Calendar.git
 ```
 
 ## 3) Create and Activate a Virtual Environment
@@ -88,7 +72,6 @@ This project expects:
 - `MS_CLIENT_ID`
 - `MS_CLIENT_SECRET`
 - `APP_BASE_URL`
-- `CRON_SECRET`
 
 macOS/Linux:
 
@@ -232,20 +215,9 @@ If there are merge conflicts, resolve them, then commit and push again.
 
 ## 9) External Calendar Webhooks
 
-Google and Outlook webhooks need a public HTTPS URL. Use the Vercel deployment URL for real testing. For local testing, use a tunnel such as ngrok and set `APP_BASE_URL` to that HTTPS URL.
-
-Before enabling webhook registration, run this SQL manually in Supabase:
-
-```sql
-ALTER TABLE externals
-  ADD COLUMN subscription_id TEXT,
-  ADD COLUMN subscription_expires TIMESTAMPTZ,
-  ADD COLUMN resource_id TEXT;
-```
+Google and Outlook webhooks need a public HTTPS URL. Use the Vercel deployment URL for testing.
 
 Webhook receiver URLs:
 
 - Google: `/api/webhooks/google`
 - Outlook: `/api/webhooks/outlook`
-
-Vercel Cron calls `/api/cron/renew-subscriptions` every day. Set `CRON_SECRET` and send it as the `X-Cron-Secret` header for manual renewal checks.
