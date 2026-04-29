@@ -15,6 +15,20 @@
     {% block content %}{% endblock %}
   </main>
 
+  <script>
+      (function() {
+        var spans = document.querySelectorAll('span.local-time[data-utc]');
+        for (var i = 0; i < spans.length; i++) {
+          var raw = spans[i].getAttribute('data-utc');
+          if (!raw) continue;
+          var d = new Date(raw);
+          if (!isNaN(d.getTime())) {
+            spans[i].textContent = d.toLocaleString();
+          }
+        }
+      })();
+  </script>
+
   {% if build_info %}
   <footer class="build-footer">
     Build:

@@ -4,24 +4,6 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ---
 
-## Bugs / Quick Fixes
-
-- [ ] **Fix manage calendars — event count always shows 0**
-  Calendar cards always display "0 event(s) linked" regardless of actual event count. Wire the count up to the real `events` array length from the DB row.
-  - **Plan:** The `calendars` table already has an `events` column (`models/calendar.py:16,26`). Nothing keeps it in sync — that's the bug. Fix:
-    1. On event create, after insert, for each calendar id in the new event's `calendar_ids`: read the calendar's `events` list, append the new event id if missing, write it back.
-    2. On event delete, mirror logic: read, remove, write back.
-    3. On event update, if `calendar_ids` changed, remove from old calendars and add to new.
-    4. Template `api/templates/user/calendars.html:94` already reads `cal.events` — leave alone.
-    5. Backfill once: loop every event, append its id into each matching calendar's `events`.
-    6. Also fix the synced-calendar insert path in `models/external.py:125` so synced events update the calendar's `events` list too (do this together with item 9).
-
-- [ ] **Default event create form times to now / now+1hr**
-  On the manage events page, default start datetime to now and end datetime to 1 hour from now when the create form opens.
-  - **Plan:** In the route that renders `api/templates/user/events.html`, build two strings using `datetime.now()` and `datetime.now() + timedelta(hours=1)`, format with `.strftime("%Y-%m-%dT%H:%M")`, and pass them to the template as `default_start` / `default_end`. Set `value="{{ default_start }}"` and `value="{{ default_end }}"` on the start/end `<input type="datetime-local">` fields.
-
----
-
 ## UI / UX
 
 - [ ] **Format timestamps in local timezone across all user pages**
@@ -135,29 +117,6 @@ Known tasks and improvements for the Calendar project. Update this file when you
 - [ ] **Remove `email` from `User.__init__`**
   `self.email` is stored but never read on any `User` instance. Drop the param and update both call sites: `api/api_routes/helpers.py:9` and `api/ui_routes/helpers.py:276`.
   - **Plan:** In `models/user.py` lines 10–13, delete the `email` parameter and the `self.email = email` line. Update the two call sites to drop `email=...`. Before doing so, grep the repo for `self.email` and `User(.*email=` to confirm nothing else reads it.
-
-- [ ] **Add `Event.find(eventId)` static method to `models/event.py`**
-  Should query the `events` table by id and return the row dict or `None`. Then replace `u.viewEvent(event_id)` in `api/ui_routes/routes/user.py:100` with `Event.find(event_id)`.
-  - **Plan:** In `models/event.py`, copy the pattern from `Calendar.findByGuestToken` (`models/calendar.py:76–88`):
-    ```python
-    @staticmethod
-    def find(eventId):
-        db = get_supabase_client()
-        result = db.table("events").select("*").eq("id", eventId).limit(1).execute()
-        rows = result.data or []
-        if rows:
-            return rows[0]
-        return None
-    ```
-    Then in `api/ui_routes/routes/user.py:100`, change `u.viewEvent(event_id)` to `Event.find(event_id)`. Add `from models.event import Event` to that file's imports if missing.
-
-- [ ] **Delete `models/guest.py` and the `Guest` class**
-  All four methods are unused once `Event.find()` is in place. Remove the `from models.guest import Guest` import and `(Guest)` base class from `models/user.py`.
-  - **Plan (do AFTER item above lands):**
-    1. Delete `models/guest.py`.
-    2. In `models/user.py` line 6, change `class User(Guest):` to `class User:`.
-    3. Remove the line `from models.guest import Guest` at the top of `models/user.py`.
-    4. Grep the repo for `Guest` and `from models.guest` to confirm nothing else imports it.
 
 - [ ] **`_refresh_access_token` should call `updateTokens` instead of writing inline**
   In `models/external.py` around line 91, the method writes to the DB directly. It should call `updateTokens` to consolidate token persistence into one place.

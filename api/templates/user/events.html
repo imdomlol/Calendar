@@ -59,8 +59,8 @@
       {% for event in events %}
         <tr>
           <td>{{ event.title or "Untitled" }}</td>
-          <td>{{ event.start_timestamp or "" }}</td>
-          <td>{{ event.end_timestamp or "" }}</td>
+          <td><span class="local-time" data-utc="{{ event.start_timestamp or '' }}">{{ event.start_timestamp or "" }}</span></td>
+          <td><span class="local-time" data-utc="{{ event.end_timestamp or '' }}">{{ event.end_timestamp or "" }}</span></td>
           <td style="display:flex; gap:6px; align-items:center;">
             <a href="{{ url_for('ui.edit_event', event_id=event.id) }}"
                class="btn btn-sm" style="margin-top:0;">Edit</a>

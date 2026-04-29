@@ -50,6 +50,21 @@
   {% endif %}
 
   <script>
+      // Rewrite any <span class="local-time" data-utc="..."> with the user's local format.
+      (function() {
+        var spans = document.querySelectorAll('span.local-time[data-utc]');
+        for (var i = 0; i < spans.length; i++) {
+          var raw = spans[i].getAttribute('data-utc');
+          if (!raw) continue;
+          var d = new Date(raw);
+          if (!isNaN(d.getTime())) {
+            spans[i].textContent = d.toLocaleString();
+          }
+        }
+      })();
+  </script>
+
+  <script>
       // Improved user menu logic: stays open on hover, closes with delay
       (function() {
         var menu = document.getElementById('userMenu');

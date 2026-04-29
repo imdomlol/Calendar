@@ -71,9 +71,19 @@ function loadState()  {
 /* ── helpers ────────────────────────────────────────────────── */
 function p2(n) { return String(n).padStart(2,'0'); }
 function ds(y,m,d) { return `${y}-${p2(m+1)}-${p2(d)}`; }
-function evDate(ts) { return ts ? ts.substring(0,10) : null; }
+function evDate(ts) {
+  if (!ts) return null;
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return null;
+  return d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate());
+}
 function evsByDate(dateStr) { return EVENTS.filter(e => evDate(e.start_timestamp) === dateStr); }
-function fmtTime(ts) { return ts ? ts.substring(11,16) : ''; }
+function fmtTime(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
                       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
