@@ -1,12 +1,8 @@
 from utils.supabase_client import get_supabase_client
-from models.guest import Guest
 from typing import Any
 
 
-class User(Guest):
-    # User extends Guest, so it inherits viewCalendar, viewEvent, editCalendar, editEvent
-    # on top of that, User has a userId and can do full CRUD on everything
-
+class User():
     def __init__(self, userId: str, displayName: str, email: str) -> None:
         self.userId = userId
         self.displayName = displayName
