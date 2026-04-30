@@ -88,6 +88,11 @@
     {% endif %}
   </table>
 </div>
+<div class="card" style="margin-top: 20px;">
+  <h4>Remove Account</h4>
+  <p>Permanently delete your account and all associated data. This cannot be undone.</p>
+  <a class="btn danger" href="{{ url_for('ui.remove_account') }}">Remove Account</a>
+</div>
 <script>
 function disconnectExternal(externalId) {
     if (!confirm('Disconnect this account?')) return;
