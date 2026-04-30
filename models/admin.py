@@ -3,6 +3,7 @@ from models.external import External
 from utils.supabase_client import get_supabase_client
 from utils.logger import get_logger_client, logEvent
 from typing import Any
+from uuid import UUID
 
 
 def _admin_db():
@@ -11,6 +12,14 @@ def _admin_db():
     if db is None:
         db = get_supabase_client()
     return db
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 class Admin(User):
@@ -72,6 +81,7 @@ class Admin(User):
 
     @staticmethod
     def findUserByQuery(q):
+        q = str(q).strip()
         if not q:
             return None
 
@@ -85,9 +95,10 @@ class Admin(User):
             return result.data[0]
 
         # ids are last so a display name that looks id-like still wins.
-        result = db.table("users").select("id, email, display_name").eq("id", q).limit(1).execute()
-        if result.data:
-            return result.data[0]
+        if _is_uuid(q):
+            result = db.table("users").select("id, email, display_name").eq("id", q).limit(1).execute()
+            if result.data:
+                return result.data[0]
         return None
 
     @staticmethod

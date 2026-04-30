@@ -288,6 +288,7 @@ def resolve_member_id(value: str):
 
 
 from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular import
+from utils.logger import get_logger_client  # noqa: E402
 
 
 @ui_bp.context_processor
@@ -296,7 +297,10 @@ def _inject_globals():
     # this runs before every request so the template always has fresh data
     active_message = None
     try:
-        db = get_supabase_client()
+        # Use the logger client (separate singleton) rather than get_supabase_client(),
+        # because sign_in_with_password mutates the shared client's session to the user
+        # JWT, which causes RLS to block the notifications read on subsequent requests.
+        db = get_logger_client() or get_supabase_client()
         result = (
             db.table("notifications")
             .select("message")
