@@ -1,54 +1,30 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if role == "admin" %}
-  <div class="hero">
-    <h1>Admin Dashboard</h1>
-    <p class="muted">Manage system-wide actions from one place.</p>
+<div class="hero">
+  <h1>Admin Dashboard</h1>
+  <p class="muted">Manage system-wide actions from one place.</p>
+</div>
+<div class="grid">
+  <div class="card">
+    <h4>View system logs</h4>
+    <p>Inspect recent platform activity.</p>
+    <a class="btn" href="{{ url_for('ui.system_logs') }}">Open</a>
   </div>
-  <div class="grid">
-    <div class="card">
-      <h4>View system logs</h4>
-      <p>Inspect recent platform activity.</p>
-      <a class="btn" href="{{ url_for('ui.system_logs') }}">Open</a>
-    </div>
-    <div class="card">
-      <h4>Send notifications</h4>
-      <p>Push platform updates to all users.</p>
-      <a class="btn warning" href="{{ url_for('ui.send_notification') }}">Open</a>
-    </div>
-    <div class="card">
-      <h4>Suspend user account</h4>
-      <p>Temporarily disable access.</p>
-      <a class="btn danger" href="{{ url_for('ui.suspend_user') }}">Open</a>
-    </div>
-    <div class="card">
-      <h4>Unlink all external calendars</h4>
-      <p>Break linked external integrations.</p>
-      <a class="btn" href="{{ url_for('ui.admin_unlink') }}">Open</a>
-    </div>
+  <div class="card">
+    <h4>Send notifications</h4>
+    <p>Push platform updates to all users.</p>
+    <a class="btn warning" href="{{ url_for('ui.send_notification') }}">Open</a>
   </div>
-{% else %}
-  <div class="hero">
-    <h1>User Dashboard</h1>
-    <p class="muted">Manage your calendars, friends, external calendars, and events.</p>
+  <div class="card">
+    <h4>Suspend user account</h4>
+    <p>Temporarily disable access.</p>
+    <a class="btn danger" href="{{ url_for('ui.suspend_user') }}">Open</a>
   </div>
-  <div class="grid">
-    <div class="card">
-      <h4>Manage Externals</h4>
-      <p>Connect, disconnect, or sync Google/Outlook calendars.</p>
-      <a class="btn" href="{{ url_for('ui.manage_externals') }}">Open</a>
-    </div>
-    <div class="card">
-      <h4>Manage Calendars</h4>
-      <p>Create calendars and manage events.</p>
-      <a class="btn" href="{{ url_for('ui.manage_calendars') }}">Open</a>
-    </div>
-    <div class="card">
-      <h4>Manage Friends</h4>
-      <p>Add and remove friends from your list.</p>
-      <a class="btn" href="{{ url_for('ui.manage_friends') }}">Open</a>
-    </div>
+  <div class="card">
+    <h4>Unlink all external calendars</h4>
+    <p>Break linked external integrations.</p>
+    <a class="btn" href="{{ url_for('ui.admin_unlink') }}">Open</a>
   </div>
-{% endif %}
+</div>
 {% endblock %}

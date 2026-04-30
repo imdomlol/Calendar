@@ -63,14 +63,8 @@ def brand_home():
     return redirect(url_for("ui.home"))
 
 
-@ui_bp.route("/dashboard/<role>")
-def dashboard(role):
-    if role in {"user", "admin"} and not _ui_user():
+@ui_bp.route("/dashboard/admin")
+def dashboard():
+    if not _ui_user():
         return redirect(url_for("ui.login", next=request.path))
-    nav = admin_nav() if role == "admin" else user_nav()
-    return render_page(
-        "Admin Dashboard" if role == "admin" else "User Dashboard",
-        role,
-        nav,
-        "home/dashboard.html",
-    )
+    return render_page("Admin Dashboard", "admin", admin_nav(), "home/dashboard.html")
