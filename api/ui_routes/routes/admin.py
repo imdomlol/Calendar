@@ -2,7 +2,6 @@ from flask import jsonify, redirect, request, url_for
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav, _make_ui_user
 from models.admin import Admin
-from utils.supabase_client import get_supabase_client
 from utils.logger import get_logger_client
 
 
@@ -93,49 +92,16 @@ def system_logs_data():
     return jsonify({"logs": logs})
 
 
-def _find_admin_target_user(db, q):
-    target_user = None
-
-    if q:
-        result = db.table("users").select("id, email, display_name").eq("email", q).limit(1).execute()
-        if result.data:
-            target_user = result.data[0]
-        else:
-            result = db.table("users").select("id, email, display_name").eq("display_name", q).limit(1).execute()
-            if result.data:
-                target_user = result.data[0]
-            else:
-                # ids are last so a display name that looks id-like still wins.
-                result = db.table("users").select("id, email, display_name").eq("id", q).limit(1).execute()
-                if result.data:
-                    target_user = result.data[0]
-
-    return target_user
-
-
 @ui_bp.route("/admin/notifications", methods=["GET", "POST"])
 @ui_admin_required
 def send_notification():
-    db = get_supabase_client()
-
     if request.method == "POST":
         message = request.form.get("message", "").strip()
         if message:
-            db.table("notifications").update({"active": False}).eq("active", True).execute()
-            db.table("notifications").insert({"message": message, "active": True}).execute()
+            Admin.sendSystemWideNotifications(message)
         return redirect(url_for("ui.send_notification"))
 
-    active_message = None
-    result = (
-        db.table("notifications")
-        .select("message")
-        .eq("active", True)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if result.data:
-        active_message = result.data[0].get("message")
+    active_message = Admin.getActiveNotificationMessage()
 
     return render_page(
         "Notifications",
@@ -149,16 +115,13 @@ def send_notification():
 @ui_bp.route("/admin/notifications/clear", methods=["POST"])
 @ui_admin_required
 def clear_notification():
-    db = get_supabase_client()
-    db.table("notifications").update({"active": False}).eq("active", True).execute()
+    Admin.clearActiveNotifications()
     return redirect(url_for("ui.send_notification"))
 
 
 @ui_bp.route("/admin/suspend", methods=["GET", "POST"])
 @ui_admin_required
 def suspend_user():
-    db = get_supabase_client()
-
     if request.method == "POST":
         user_id = request.form.get("user_id", "").strip()
         if user_id:
@@ -168,7 +131,7 @@ def suspend_user():
         return redirect(url_for("ui.suspend_user"))
 
     q = request.args.get("q", "").strip()
-    target_user = _find_admin_target_user(db, q)
+    target_user = Admin.findUserByQuery(q)
     return render_page(
         "Suspend User",
         "admin",
@@ -181,40 +144,28 @@ def suspend_user():
 @ui_bp.route("/admin/users")
 @ui_admin_required
 def admin_users():
-    db = get_supabase_client()
-    result = db.table("users").select("id, email, display_name, is_admin").execute()
-    users = result.data or []
+    users = Admin.listAllUsers()
     return render_page("Manage Users", "admin", admin_nav(), "admin/users.html", users=users)
 
 
 @ui_bp.route("/admin/users/<user_id>/toggle-admin", methods=["POST"])
 @ui_admin_required
 def admin_toggle_admin(user_id):
-    db = get_supabase_client()
-    current = db.table("users").select("is_admin").eq("id", user_id).limit(1).execute()
-    if not current.data:
+    new_val = Admin.toggleUserAdmin(user_id)
+    if new_val is None:
         return jsonify({"error": "User not found"}), 404
-    new_val = not bool(current.data[0].get("is_admin", False))
-    db.table("users").update({"is_admin": new_val}).eq("id", user_id).execute()
     return jsonify({"is_admin": new_val})
 
 
 @ui_bp.route("/admin/unlink")
 @ui_admin_required
 def admin_unlink():
-    db = get_supabase_client()
     q = request.args.get("q", "").strip()
-    target_user = _find_admin_target_user(db, q)
+    target_user = Admin.findUserByQuery(q)
     externals = []
 
     if target_user:
-        result = (
-            db.table("externals")
-            .select("id, provider, url")
-            .eq("user_id", target_user["id"])
-            .execute()
-        )
-        externals = result.data or []
+        externals = Admin.listExternalsForUser(target_user["id"])
 
     return render_page(
         "Unlink External Calendars",
@@ -225,3 +176,12 @@ def admin_unlink():
         target_user=target_user,
         externals=externals,
     )
+
+
+@ui_bp.route("/admin/unlink/<external_id>", methods=["POST"])
+@ui_admin_required
+def admin_unlink_external(external_id):
+    ok = Admin.unlinkExternalById(external_id)
+    if not ok:
+        return jsonify({"error": "External not found"}), 404
+    return jsonify({"ok": True})

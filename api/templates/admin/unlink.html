@@ -49,7 +49,7 @@
 <script>
 function unlinkExternal(extId) {
     if (!confirm('Unlink this external calendar? This cannot be undone.')) return;
-    fetch('/ui/settings/external/' + extId, { method: 'DELETE' }).then(function(r) {
+    fetch('/ui/admin/unlink/' + extId, { method: 'POST' }).then(function(r) {
         if (r.ok) {
             window.location.reload();
         } else {
