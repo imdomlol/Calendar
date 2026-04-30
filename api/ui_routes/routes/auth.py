@@ -67,27 +67,35 @@ def login():
                     # get the role from app_meta, if its not there just use "user" as the default
                     role = app_meta.get("role", "user")
 
-                    # check the is_admin column on the users table
+                    # check account flags on the users table
                     is_admin = False
+                    is_suspended = False
                     try:
-                        admin_result = calDb.table("users").select("is_admin").eq("id", uid).limit(1).execute()
-                        if admin_result.data:
-                            is_admin = bool(admin_result.data[0].get("is_admin", False))
+                        user_result = calDb.table("users").select("is_admin, is_suspended").eq("id", uid).limit(1).execute()
+                        if user_result.data:
+                            user_row = user_result.data[0]
+                            is_admin = bool(user_row.get("is_admin", False))
+                            is_suspended = bool(user_row.get("is_suspended", False))
                     except Exception:
                         pass
 
-                    # save the user info to the flask session
-                    # this is how we remember who is logged in between requests
-                    session["ui_user"] = {
-                        "id": uid,
-                        "email": getattr(user_obj, "email", email),
-                        "access_token": access_tok,
-                        "role": role,
-                        "is_admin": is_admin,
-                    }
-                    logEvent("INFO", "auth", "login successful", userId=uid, details="email: " + email)
-                    # send them to wherever they were trying to go
-                    return redirect(nextPath)
+                    if is_suspended:
+                        session.pop("ui_user", None)
+                        logEvent("WARNING", "auth", "Suspended account", userId=uid, details="email: " + email)
+                        error = "Your account has been suspended"
+                    else:
+                        # save the user info to the flask session
+                        # this is how we remember who is logged in between requests
+                        session["ui_user"] = {
+                            "id": uid,
+                            "email": getattr(user_obj, "email", email),
+                            "access_token": access_tok,
+                            "role": role,
+                            "is_admin": is_admin,
+                        }
+                        logEvent("INFO", "auth", "login successful", userId=uid, details="email: " + email)
+                        # send them to wherever they were trying to go
+                        return redirect(nextPath)
             except Exception as e:
                 logEvent("WARNING", "auth", "login failed - exception", details="email: " + email + " error: " + str(e))
                 error = _format_login_error(e)

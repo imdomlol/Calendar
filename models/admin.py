@@ -29,16 +29,11 @@ class Admin(User):
     @staticmethod
     def suspendUserAccount(userId: str) -> Any:
         db = _admin_db()
-        # delete externals first so the user loses external access even if the calendar delete fails
+        # mark the account as suspended without deleting the user's data.
         try:
-            db.table("externals").delete().eq("user_id", userId).execute()
+            result = db.table("users").update({"is_suspended": True}).eq("id", userId).execute()
         except Exception as err:
-            logEvent("ERROR", "admin", f"suspendUserAccount: failed to delete externals for {userId}: {err}", userId=userId)
-            raise
-        try:
-            result = db.table("calendars").delete().eq("owner_id", userId).execute()
-        except Exception as err:
-            logEvent("ERROR", "admin", f"suspendUserAccount: externals removed but calendar delete failed for {userId}: {err}", userId=userId)
+            logEvent("ERROR", "admin", f"suspendUserAccount: failed to suspend user {userId}: {err}", userId=userId)
             raise
         logEvent("INFO", "admin", f"admin suspended user {userId}", userId=userId)
         return result
