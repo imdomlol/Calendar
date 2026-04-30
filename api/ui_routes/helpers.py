@@ -294,8 +294,26 @@ from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular i
 def _inject_globals():
     # inject variables that every template can use
     # this runs before every request so the template always has fresh data
+    active_message = None
+    try:
+        db = get_supabase_client()
+        result = (
+            db.table("notifications")
+            .select("message")
+            .eq("active", True)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            active_message = result.data[0].get("message")
+    except Exception:
+        # page rendering should survive if notification storage is down.
+        active_message = None
+
     return {
         "ui_user": _ui_user(),
         "features_nav": features_nav(),
         "build_info": BUILD_INFO,
+        "active_message": active_message,
     }

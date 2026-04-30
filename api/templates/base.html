@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="{{ url_for('ui.static', filename='styles.css') }}" />
 </head>
 <body>
+  {% if active_message %}
+  <div style="background: #fff3bf; color: #3f2f00; border-bottom: 1px solid #f0d36a; padding: 12px 20px; text-align: center; font-weight: 600;">
+    {{ active_message }}
+  </div>
+  {% endif %}
   <div class="topbar">
     <div class="brand"><a href="{{ url_for('ui.brand_home') }}">Calendar System</a></div>
     {% if not hide_chrome %}

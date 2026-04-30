@@ -3,17 +3,32 @@
 {% block content %}
 <div class="hero">
   <h1>Unlink External Calendars</h1>
-  <p class="muted">Admin action for external calendar disconnection.</p>
+  <p class="muted">Find a user before unlinking external calendars.</p>
 </div>
 <div class="card">
-  <h4>Linked external calendars</h4>
+  <h4>Find User</h4>
+  <form method="get" action="{{ url_for('ui.admin_unlink') }}">
+    <input type="text" name="q" value="{{ q }}" />
+    <button class="btn" type="submit">Search</button>
+  </form>
+</div>
+
+{% if target_user %}
+<div class="card">
+  <h4>User</h4>
+  <p>ID: {{ target_user.id }}</p>
+  <p>Email: {{ target_user.email }}</p>
+  <p>Display Name: {{ target_user.display_name }}</p>
+</div>
+
+<div class="card">
+  <h4>Linked External Calendars</h4>
   {% if externals %}
   <table>
-    <tr><th>Provider</th><th>User ID</th><th>URL</th><th>Action</th></tr>
+    <tr><th>Provider</th><th>URL</th><th>Action</th></tr>
     {% for ext in externals %}
     <tr>
       <td>{{ ext.provider }}</td>
-      <td>{{ ext.user_id }}</td>
       <td>{{ ext.url }}</td>
       <td>
         <button class="btn danger btn-sm" onclick="unlinkExternal('{{ ext.id }}')">Unlink</button>
@@ -25,6 +40,11 @@
   <p class="muted">No external calendars linked.</p>
   {% endif %}
 </div>
+{% elif q %}
+<div class="card">
+  <p class="muted">No matching user found.</p>
+</div>
+{% endif %}
 
 <script>
 function unlinkExternal(extId) {

@@ -1,6 +1,7 @@
-from flask import jsonify, request
+from flask import jsonify, redirect, request, url_for
 from api.ui_routes import ui_bp
-from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav
+from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav, _make_ui_user
+from models.admin import Admin
 from utils.supabase_client import get_supabase_client
 from utils.logger import get_logger_client
 
@@ -92,18 +93,90 @@ def system_logs_data():
     return jsonify({"logs": logs})
 
 
-@ui_bp.route("/admin/notifications")
+def _find_admin_target_user(db, q):
+    target_user = None
+
+    if q:
+        result = db.table("users").select("id, email, display_name").eq("email", q).limit(1).execute()
+        if result.data:
+            target_user = result.data[0]
+        else:
+            result = db.table("users").select("id, email, display_name").eq("display_name", q).limit(1).execute()
+            if result.data:
+                target_user = result.data[0]
+            else:
+                # ids are last so a display name that looks id-like still wins.
+                result = db.table("users").select("id, email, display_name").eq("id", q).limit(1).execute()
+                if result.data:
+                    target_user = result.data[0]
+
+    return target_user
+
+
+@ui_bp.route("/admin/notifications", methods=["GET", "POST"])
 @ui_admin_required
 def send_notification():
-    # show the notifications page
-    # admin can send messages from here
-    return render_page("Notifications", "admin", admin_nav(), "admin/notification.html")
+    db = get_supabase_client()
+
+    if request.method == "POST":
+        message = request.form.get("message", "").strip()
+        if message:
+            db.table("notifications").update({"active": False}).eq("active", True).execute()
+            db.table("notifications").insert({"message": message, "active": True}).execute()
+        return redirect(url_for("ui.send_notification"))
+
+    active_message = None
+    result = (
+        db.table("notifications")
+        .select("message")
+        .eq("active", True)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        active_message = result.data[0].get("message")
+
+    return render_page(
+        "Notifications",
+        "admin",
+        admin_nav(),
+        "admin/notification.html",
+        active_message=active_message,
+    )
 
 
-@ui_bp.route("/admin/suspend")
+@ui_bp.route("/admin/notifications/clear", methods=["POST"])
+@ui_admin_required
+def clear_notification():
+    db = get_supabase_client()
+    db.table("notifications").update({"active": False}).eq("active", True).execute()
+    return redirect(url_for("ui.send_notification"))
+
+
+@ui_bp.route("/admin/suspend", methods=["GET", "POST"])
 @ui_admin_required
 def suspend_user():
-    return render_page("Suspend User", "admin", admin_nav(), "admin/suspend.html")
+    db = get_supabase_client()
+
+    if request.method == "POST":
+        user_id = request.form.get("user_id", "").strip()
+        if user_id:
+            admin_user = _make_ui_user()
+            admin = Admin(userId=admin_user.userId, displayName=admin_user.displayName)
+            admin.suspendUserAccount(user_id)
+        return redirect(url_for("ui.suspend_user"))
+
+    q = request.args.get("q", "").strip()
+    target_user = _find_admin_target_user(db, q)
+    return render_page(
+        "Suspend User",
+        "admin",
+        admin_nav(),
+        "admin/suspend.html",
+        q=q,
+        target_user=target_user,
+    )
 
 @ui_bp.route("/admin/users")
 @ui_admin_required
@@ -130,7 +203,25 @@ def admin_toggle_admin(user_id):
 @ui_admin_required
 def admin_unlink():
     db = get_supabase_client()
-    result = db.table("externals").select("id, provider, user_id, url").execute()
-    externals = result.data or []
-    return render_page("Unlink External Calendars", "admin", admin_nav(), "admin/unlink.html",
-                       externals=externals)
+    q = request.args.get("q", "").strip()
+    target_user = _find_admin_target_user(db, q)
+    externals = []
+
+    if target_user:
+        result = (
+            db.table("externals")
+            .select("id, provider, url")
+            .eq("user_id", target_user["id"])
+            .execute()
+        )
+        externals = result.data or []
+
+    return render_page(
+        "Unlink External Calendars",
+        "admin",
+        admin_nav(),
+        "admin/unlink.html",
+        q=q,
+        target_user=target_user,
+        externals=externals,
+    )

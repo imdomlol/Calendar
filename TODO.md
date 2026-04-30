@@ -124,6 +124,34 @@ Known tasks and improvements for the Calendar project. Update this file when you
 
 ---
 
+## Admin Tools
+
+- [ ] **Send Notification — custom message broadcast as site-wide banner**
+  The Send Notification page currently shows hardcoded placeholder copy. Replace with a textarea where the admin types a custom message (e.g. "Scheduled maintenance Friday 11PM–12AM"). On submit, the message must display in a banner at the top of every page for every logged-in user until dismissed or replaced.
+  - **Plan:**
+    1. **Schema migration** (run manually in Supabase): create a `notifications` table with `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, `message TEXT NOT NULL`, `created_at TIMESTAMPTZ DEFAULT now()`, `active BOOLEAN NOT NULL DEFAULT true`.
+    2. **Update template** `api/templates/admin/notification.html`: replace the static `<p>` lines with `<form method="POST" action="{{ url_for('ui.send_notification') }}">`, a `<textarea name="message" required>`, and a submit button. Show the currently active notification (if any) above the form with a "Clear" button that POSTs to a separate route.
+    3. **Update route** `api/ui_routes/routes/admin.py:send_notification`: change to `methods=["GET", "POST"]`. On POST: read `request.form.get("message")`, set all existing rows to `active=false` (`db.table("notifications").update({"active": False}).eq("active", True).execute()`), then insert the new row with `active=True`. Redirect back to the same page.
+    4. **Add clear route** `POST /admin/notifications/clear` that sets all `active=true` rows to `false`.
+    5. **Inject banner into every page**: in `api/ui_routes/helpers.py` `_inject_globals()` (line 293), fetch the latest active notification: `db.table("notifications").select("message").eq("active", True).order("created_at", desc=True).limit(1).execute()`. Add `"active_notification": result.data[0]["message"] if result.data else None` to the returned dict.
+    6. **Render in base template** `api/templates/base.html` near the top of `<body>`: `{% if active_notification %}<div class="site-banner">{{ active_notification }}</div>{% endif %}`. Add minimal CSS for `.site-banner` (full-width, contrasting background).
+
+- [ ] **Suspend User Account — search by userId, email, or display name**
+  Replace the static placeholder on the Suspend User page with a search input that accepts userId, email, or display name. On submit, show the matching user's details and a confirmation button that calls the existing `Admin.suspendUserAccount()` model method.
+  - **Plan:**
+    1. **Update template** `api/templates/admin/suspend.html`: replace the static text with a `<form method="GET">` containing `<input name="q" placeholder="user ID, email, or display name">` and a Search button. Below the form, if a `target_user` is in context, show their `id`, `email`, `display_name` and a `<form method="POST">` with a "Suspend Account" button.
+    2. **Update route** `api/ui_routes/routes/admin.py:suspend_user`: change to `methods=["GET", "POST"]`. On GET with `q` query param: try email lookup, then display_name lookup, then treat as userId — first match wins. Pass result as `target_user=row` to the template. On POST: read `user_id` from form, instantiate `Admin(...)`, call `suspendUserAccount(user_id)`, redirect back with a success flash.
+    3. **Reuse the existing search pattern** from `models/user.py:addFriend()` (the email/display_name/userId fallback ladder) so the lookup logic is consistent.
+
+- [ ] **Unlink External Calendars — search a user, then pick which externals to unlink**
+  The current page lists every external in the system. Change the flow: admin searches a specific user (by userId, email, or display name), the page then shows only that user's linked externals with an Unlink button per row.
+  - **Plan:**
+    1. **Update template** `api/templates/admin/unlink.html`: at the top, add a `<form method="GET">` with `<input name="q" placeholder="user ID, email, or display name">` and a Search button. Below the form, only show the externals table if a `target_user` is in context. The table shows that user's externals only.
+    2. **Update route** `api/ui_routes/routes/admin.py:admin_unlink`: when `q` is present in `request.args`, run the same email → display_name → userId search ladder as the suspend page above. With the resolved user id, fetch `db.table("externals").select("id, provider, url").eq("user_id", uid).execute()`. Pass `target_user=row` and `externals=result.data or []`. With no `q`, render the search form only.
+    3. **Keep the existing unlink button JS** in the template — it already POSTs to `/ui/settings/external/<id>`; that endpoint deletes by external id and doesn't care which admin invoked it.
+
+---
+
 ## Architecture / Cleanup
 
 - [x] **Refactor admin role to `is_admin` column on `users` table**
