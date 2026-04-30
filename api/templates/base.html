@@ -20,7 +20,7 @@
         <a href="{{ item.href }}">{{ item.label }}</a>
         {% endfor %}
         <a href="{{ url_for('ui.settings_page') }}">&#9881;&nbsp; Settings</a>
-        {% if ui_user.role == "admin" %}
+        {% if ui_user.is_admin %}
         <div class="user-menu-divider"></div>
         <a href="{{ url_for('ui.system_logs') }}">&#9998;&nbsp; Admin</a>
         {% endif %}
