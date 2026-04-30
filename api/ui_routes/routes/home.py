@@ -73,5 +73,4 @@ def dashboard(role):
         role,
         nav,
         "home/dashboard.html",
-        role=role,
     )
