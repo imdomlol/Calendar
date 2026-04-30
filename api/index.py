@@ -5,7 +5,6 @@ from flask_cors import CORS
 from supabase import create_client
 
 from api.api_routes import api_bp
-from api.auth_routes import auth_bp
 from api.ui_routes import ui_bp
 from utils.logger import logEvent
 
@@ -18,7 +17,6 @@ supabase = supabaseClient
 
 CORS(app, resources={r"/api/*": {"origins": "https://your-domain.com"}})
 
-app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(api_bp)
 app.register_blueprint(ui_bp, url_prefix="/ui")
 
