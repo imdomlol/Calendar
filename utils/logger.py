@@ -18,7 +18,7 @@ def get_logger_client():
 
 # this function logs stuff to the supabase logs table
 # call it from anywhere in the app
-def logEvent(level, eventType, message, userId=None, path=None, method=None, statusCode=None, details=None):
+def log_event(level, eventType, message, userId=None, path=None, method=None, statusCode=None, details=None):
     # put all the data into a dict so we can insert it
     # keys have to match the column names in supabase (snake_case)
     logRecord = {}

@@ -1,7 +1,7 @@
 from models.user import User
 from models.external import External
 from utils.supabase_client import get_supabase_client
-from utils.logger import get_logger_client, logEvent
+from utils.logger import get_logger_client, log_event
 from typing import Any
 from uuid import UUID
 
@@ -33,9 +33,9 @@ class Admin(User):
         try:
             result = db.table("users").update({"is_suspended": True}).eq("id", userId).execute()
         except Exception as err:
-            logEvent("ERROR", "admin", f"suspendUserAccount: failed to suspend user {userId}: {err}", userId=userId)
+            log_event("ERROR", "admin", f"suspendUserAccount: failed to suspend user {userId}: {err}", userId=userId)
             raise
-        logEvent("INFO", "admin", f"admin suspended user {userId}", userId=userId)
+        log_event("INFO", "admin", f"admin suspended user {userId}", userId=userId)
         return result
 
     @staticmethod
@@ -51,13 +51,13 @@ class Admin(User):
         db.table("notifications").update({"active": False}).eq("active", True).execute()
         new_row = {"message": message, "active": True}
         db.table("notifications").insert(new_row).execute()
-        logEvent("INFO", "notification", message)
+        log_event("INFO", "notification", message)
 
     @staticmethod
     def clearActiveNotifications() -> None:
         db = _admin_db()
         db.table("notifications").update({"active": False}).eq("active", True).execute()
-        logEvent("INFO", "notification", "admin cleared active notifications")
+        log_event("INFO", "notification", "admin cleared active notifications")
 
     @staticmethod
     def getActiveNotificationMessage():
@@ -118,7 +118,7 @@ class Admin(User):
             new_val = True
 
         db.table("users").update({"is_admin": new_val}).eq("id", userId).execute()
-        logEvent("INFO", "admin", "admin toggled is_admin on user " + str(userId) + " to " + str(new_val), userId=userId)
+        log_event("INFO", "admin", "admin toggled is_admin on user " + str(userId) + " to " + str(new_val), userId=userId)
         return new_val
 
     @staticmethod
@@ -133,7 +133,7 @@ class Admin(User):
     def unlinkAllExternalCalendars(userId: str) -> Any:
         db = _admin_db()
         result = db.table("externals").delete().eq("user_id", userId).execute()
-        logEvent("INFO", "admin", "admin unlinked all externals for user " + str(userId), userId=userId)
+        log_event("INFO", "admin", "admin unlinked all externals for user " + str(userId), userId=userId)
         return result
 
     @staticmethod
@@ -147,5 +147,5 @@ class Admin(User):
         owner_id = lookup.data[0].get("user_id")
         ext = External(id=externalId, supabaseClient=db, userId=owner_id)
         ext.remove(externalId)
-        logEvent("INFO", "admin", "admin unlinked external " + str(externalId), userId=owner_id)
+        log_event("INFO", "admin", "admin unlinked external " + str(externalId), userId=owner_id)
         return True

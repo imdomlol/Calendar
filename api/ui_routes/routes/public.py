@@ -2,7 +2,7 @@ import logging
 import traceback
 from flask import make_response, request
 from api.ui_routes import ui_bp
-from api.ui_routes.helpers import guest_nav, render_page
+from api.ui_routes.helpers import render_page
 from models.calendar import Calendar
 
 calLogger = logging.getLogger(__name__)
@@ -16,13 +16,13 @@ def public_calendar(token):
     try:
         calendar_row = Calendar.findByGuestToken(token)
         if not calendar_row:
-            return render_page("Shared Calendar", "guest", guest_nav(), "guest/not_found.html")
+            return render_page("Shared Calendar", "guest/not_found.html")
 
         events = Calendar.listEvents(calendar_row.get("id"))
         role = str(calendar_row.get("guest_link_role") or "viewer").lower()
 
         return render_page(
-            "Shared Calendar", "guest", guest_nav(), "guest/calendar.html",
+            "Shared Calendar", "guest/calendar.html",
             token=token,
             calendar=calendar_row,
             events=events,
@@ -36,7 +36,7 @@ def public_calendar(token):
             token, type(err).__name__, err, traceback.format_exc(),
         )
         try:
-            return render_page("Shared Calendar", "guest", guest_nav(), "guest/not_found.html",
+            return render_page("Shared Calendar", "guest/not_found.html",
                                message="Couldn't load shared calendar, link may be invalid")
         except Exception:
             calLogger.error("public_calendar: fallback render also failed:\n%s", traceback.format_exc())

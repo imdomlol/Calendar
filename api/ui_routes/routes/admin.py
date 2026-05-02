@@ -1,6 +1,6 @@
 from flask import jsonify, redirect, request, url_for
 from api.ui_routes import ui_bp
-from api.ui_routes.helpers import render_page, ui_admin_required, admin_nav, _make_ui_user
+from api.ui_routes.helpers import render_page, ui_admin_required, _make_ui_user
 from models.admin import Admin
 from utils.logger import get_logger_client
 
@@ -11,8 +11,7 @@ from utils.logger import get_logger_client
 def system_logs():
     # get the admin nav links and render the page
     # the actual log data is loaded by javascript after the page loads
-    nav = admin_nav()
-    return render_page("System Logs", "admin", nav, "admin/logs.html")
+    return render_page("System Logs", "admin/logs.html")
 
 
 # this is the route that javascript calls to get log data as json
@@ -105,8 +104,6 @@ def send_notification():
 
     return render_page(
         "Notifications",
-        "admin",
-        admin_nav(),
         "admin/notification.html",
         active_message=active_message,
     )
@@ -134,8 +131,6 @@ def suspend_user():
     target_user = Admin.findUserByQuery(q)
     return render_page(
         "Suspend User",
-        "admin",
-        admin_nav(),
         "admin/suspend.html",
         q=q,
         target_user=target_user,
@@ -145,7 +140,7 @@ def suspend_user():
 @ui_admin_required
 def admin_users():
     users = Admin.listAllUsers()
-    return render_page("Manage Users", "admin", admin_nav(), "admin/users.html", users=users)
+    return render_page("Manage Users", "admin/users.html", users=users)
 
 
 @ui_bp.route("/admin/users/<user_id>/toggle-admin", methods=["POST"])
@@ -169,8 +164,6 @@ def admin_unlink():
 
     return render_page(
         "Unlink External Calendars",
-        "admin",
-        admin_nav(),
         "admin/unlink.html",
         q=q,
         target_user=target_user,

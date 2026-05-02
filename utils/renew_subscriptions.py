@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from models.external import External
-from utils.logger import logEvent
+from utils.logger import log_event
 from utils.supabase_client import get_supabase_client
 
 
@@ -30,11 +30,11 @@ def renewSubscriptions(appBaseUrl: str):
             else:
                 clientId = ""
                 clientSecret = ""
-            ext.registerSubscription(externalId, appBaseUrl, clientId, clientSecret)
+            ext.register_subscription(externalId, appBaseUrl, clientId, clientSecret)
             renewed = renewed + 1
         except Exception as err:
             failed = failed + 1
-            logEvent("ERROR", "webhook_subscription", "Could not renew subscription",
+            log_event("ERROR", "webhook_subscription", "Could not renew subscription",
                      userId=userId, details={"external_id": externalId, "error": str(err)})
     return {
         "renewed": renewed,

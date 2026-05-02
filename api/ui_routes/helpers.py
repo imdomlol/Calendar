@@ -3,304 +3,319 @@ import subprocess
 from flask import abort, redirect, render_template, request, session, url_for
 from functools import wraps
 from utils.supabase_client import get_supabase_client
+from utils.logger import get_logger_client
 from datetime import date, datetime
 import calendar as pycalendar
+from models.user import User
 
 
+# ========================= Initialization =========================
+
+# this function runs once when the server starts
+# it tries to figure out what git commit is currently deployed
 def _compute_build_info():
     # try to get the git commit sha from the vercel env var
-    sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "").strip()
-    shortSha = sha[:7] if sha else ""
+    rawSha = os.environ.get("VERCEL_GIT_COMMIT_SHA")
+    if rawSha is None:
+        rawSha = ""
+    sha = rawSha.strip()
+
+    # the full sha is really long and we just need enough to identify the build
+    if sha:
+        shortSha = sha[:5]
+    else:
+        shortSha = ""
     commitDate = ""
 
     try:
         # run git log to get the short sha and the commit date
-        # format string splits them with ||| so we can split later
+        # the timeout is 2 seconds so we dont hang the server if github is slow
         res = subprocess.run(
             ["git", "log", "-1", "--format=%h|||%cd", "--date=format:%b %d %Y, %H:%M"],
             capture_output=True, text=True, timeout=2,
         )
+        # check if the command worked and gave us something back
         if res.returncode == 0 and res.stdout.strip():
+            # split on ||| to get the sha and date as separate parts
             parts = res.stdout.strip().split("|||", 1)
-            # only use git sha if we didnt get one from vercel
+            # only use the git sha if we didnt already get one from vercel
             if not shortSha:
                 shortSha = parts[0]
             if len(parts) > 1:
                 commitDate = parts[1]
     except Exception:
+        # if git is not available or something goes wrong we just go next
         pass
 
-    # if we have nothing return None
     if not shortSha and not commitDate:
         return None
-    # return a dict with the sha and date
     return {"sha": shortSha, "date": commitDate}
 
+# we cache it here so we dont have to run git every single request
+buildInfo = _compute_build_info()
 
-BUILD_INFO = _compute_build_info()
+# ========================= Auth Helpers =========================
 
-
-placeholder_friends = ["Jamie", "Morgan", "Taylor"]
-placeholder_logs = [
-    "[INFO] User Alice synced Google Calendar",
-    "[WARN] Failed login attempt detected",
-    "[INFO] Admin sent system-wide notification",
-]
-
-
+# this function checks if there is a logged in user in the current session
+# Flask sessions are like a little storage area attached to each browser visit
 def _ui_user():
     # get the user dict from the flask session
+    # session.get returns None if the key doesnt exist
     usr = session.get("ui_user")
-    # check if its a dict
     isDict = isinstance(usr, dict)
+
     # if its a dict and has an id then its a valid user
     if isDict == True and usr.get("id"):
         return usr
-    # otherwise return None meaning no user is logged in
+    
+    # no user is logged in
     return None
 
+# ========================= Auth Decorators =========================
 
-def _get_ui_supabase_client():
-    # get the current user data from session
-    userData = _ui_user() or {}
-    # get the access token from user data
-    tok = userData.get("access_token")
-    # if there is no token we cant make authenticated requests
-    if not tok:
-        raise RuntimeError("No token in session, can't auth calDb")
-    # get the supabase client and authenticate it with the token
-    calDb = get_supabase_client()
-    calDb.postgrest.auth(tok)
-    return calDb
-
-
-def ui_login_required(view_func):
-    # this is a decorator that checks if the user is logged in
-    # if they are not logged in it redirects them to the login page
-    # we use wraps to keep the original function name and docstring
-    @wraps(view_func)
+# this function is a decorator
+# you put @ui_login_required above a route function to protect it
+# if the user is not logged in they get sent to the login page instead of seeing the page
+def ui_login_required(viewFn):
+    # we use wraps so the original function name and metadata are preserved
+    # without wraps Flask would get confused about the function names
+    @wraps(viewFn)
     def wrapped(*args, **kwargs):
-        # check if there is a user in the session
+
         if not _ui_user():
             # no user so send them to login
-            # we pass the current path so they come back after logging in
             return redirect(url_for("ui.login", next=request.path))
-        # user is logged in so call the actual function
-        return view_func(*args, **kwargs)
+
+        # user is logged in so call the actual view function and return its result
+        return viewFn(*args, **kwargs)
     return wrapped
 
-def ui_admin_required(view_func):
-    # this decorator works just like ui_login_required
-    # but it also checks if the user is an admin
-    # if they are not admin we send back a 403 forbidden error
-    @wraps(view_func)
+# you put @ui_admin_required above admin only routes
+def ui_admin_required(viewFn):
+    # we use wraps to preserve the original function info just like in ui_login_required
+    @wraps(viewFn)
     def wrapped(*args, **kwargs):
         # first check if they are logged in at all
         usr = _ui_user()
         if not usr:
-            # not logged in, send them to the login page
+            # not logged in so send them to the login page
             return redirect(url_for("ui.login", next=request.path))
-        # they are logged in, now check if they are an admin
-        # is_admin is set from the users table at login
+
+        # is_admin is set from the is_admin column in the custom users table in Supabase (not the built in one)
         if not usr.get("is_admin"):
             # they are logged in but not an admin
-            # 403 means "you dont have permission to see this"
             abort(403)
-        # they are logged in and they are an admin, let them through
-        return view_func(*args, **kwargs)
+
+        # they are logged in and they are an admin
+        return viewFn(*args, **kwargs)
     return wrapped
 
 
-def _format_login_error(exception):
-    # pull the message and code out of the exception
-    # supabase exceptions sometimes have a message attribute
-    msg = (getattr(exception, "message", None) or str(exception) or "").strip()
-    code = (getattr(exception, "code", None) or "").strip()
+# ========================= Error Handling =========================
 
-    norm = msg.lower() #normalize so we can compare easily
+# this function takes a Supabase login error and makes it readable
+def _format_login_error(exception):
+    # Supabase exceptions sometimes have a message attribute instead of just str()
+    rawMsg = getattr(exception, "message", None)
+
+    # if there was no message attribute fall back to converting the exception to a string
+    if not rawMsg:
+        rawMsg = str(exception)
+
+    # if that is also empty just use an empty string
+    if not rawMsg:
+        rawMsg = ""
+    msg = rawMsg.strip()
+
+    # pull the error code out of the exception the same way we pulled the message
+    rawCode = getattr(exception, "code", None)
+
+    if rawCode is None:
+        rawCode = ""
+    code = rawCode.strip()
+
+    # set the message to lowercase so we can compare it without worrying about uppercase / lowercase
+    norm = msg.lower()
+
     # check if the error is about email not being confirmed
     if "email not confirmed" in norm or code == "email_not_confirmed":
-        if code:
-            return (
-                "Your account is not verified yet. Check your email for the verification link "
-                f"and try again. (code: {code})"
-            )
         return "Your account is not verified yet. Check your email for the verification link and try again."
 
-    # if there is a code include it in the message
+    # if there is a code include it in the message so we can see
     if code:
         return f"Login failed: {msg} (code: {code})"
 
-    # fallback for any other error
-    return "Invalid credentials"
+    # if nothing else matched just show a generic error
+    return "There was an issue, please try again."
 
 
+# ========================= URL and OAuth Helpers =========================
+
+# this function figures out what the base URL of the app is
+# we need this to build full URLs for things like Google OAuth redirects
 def _resolve_app_base_url():
-    # this function figures out what the base url of the app is
-    # we need this so we can build full urls for things like oauth redirects
-    # first we check if there is an environment variable set for it
-    # os.environ.get returns None if the variable doesnt exist
-    # we use or "" so we always have a string not None
-    baseUrl = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
-    # now check if we got a url from the environment
-    # if baseUrl is empty that means the env var was not set
-    if not baseUrl:
-        # fall back to getting the root url from the current request
-        # request.url_root is like http://localhost:5000/
-        # we use rstrip to remove the trailing slash
-        baseUrl = request.url_root.rstrip("/")
-    # return whatever url we ended up with
-    return baseUrl
+    return request.url_root.rstrip("/")
 
 
+# this function reads the Google OAuth client credentials from environment variables
 def _google_oauth_config():
-    # this just reads the google oauth credentials from env vars
-    # we need both of these to do the oauth flow
-    cId = (os.environ.get("GOOGLE_CLIENT_ID") or "").strip()
-    cSecret = (os.environ.get("GOOGLE_CLIENT_SECRET") or "").strip()
-    return cId, cSecret
+    rawId = os.environ.get("GOOGLE_CLIENT_ID")
+    if rawId is None:
+        rawId = ""
+    clientId = rawId.strip()
+
+    rawSecret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    if rawSecret is None:
+        rawSecret = ""
+    clientSecret = rawSecret.strip()
+    return clientId, clientSecret
 
 
+# this function works the same as _google_oauth_config but for Microsoft
 def _outlook_oauth_config():
-    cId = (os.environ.get("MS_CLIENT_ID") or "").strip()
-    cSecret = (os.environ.get("MS_CLIENT_SECRET") or "").strip()
-    return cId, cSecret
+    rawId = os.environ.get("MS_CLIENT_ID")
+    if rawId is None:
+        rawId = ""
+    clientId = rawId.strip()
 
+    rawSecret = os.environ.get("MS_CLIENT_SECRET")
+    if rawSecret is None:
+        rawSecret = ""
+    clientSecret = rawSecret.strip()
+    return clientId, clientSecret
 
+# ========================= Navigation =========================
+def features_nav():
+    return [
+            {"label": "Calendars", "href": url_for("ui.manage_calendars")},
+            {"label": "Events", "href": url_for("ui.manage_events")},
+            {"label": "Friends", "href": url_for("ui.manage_friends")},
+    ]
 
-def build_month_preview_data(events_for_calendar):
-    # get todays date so we know which month to build
+# ========================= Calendar Helper =========================
+
+# this function builds the data needed to show a mini calendar grid for the current month
+# it figures out which days have events on them so we can show dots or counts on those days
+# it gives back a dict with a label like "May 2026" and a list of weeks
+# each week is a list of dicts with the day number and how many events are on that day
+def build_month_preview_data(eventsForCalendar):
     today = date.today()
     year = today.year
     month = today.month
 
-    # count how many events fall on each day of the month
-    # evtCounts is a dict where the key is the day number
+    # evtCounts is a dict where the key is the day number like 1 through 31 and the value is how many events are on that day
     evtCounts = {}
-    for event in events_for_calendar:
-        raw = str(event.get("start_timestamp") or "")
+    for event in eventsForCalendar:
+        # event.get returns None if the key is missing so we replace it with an empty string
+        ts = event.get("start_timestamp")
+        if ts is None:
+            ts = ""
+        raw = str(ts)
         try:
-            # parse the timestamp into a datetime object
-            # we only use the first 19 chars to cut off timezone info
+            # parse the timestamp string into a datetime object
+            # a typical timestamp looks like 2026-05-02T14:30:00+00:00 and we grab up to the seconds
             dt = datetime.fromisoformat(raw[:19])
         except ValueError:
-            # if the timestamp is not a valid datetime we just skip this event
+            # if the timestamp is not in a valid format we just skip this event
             continue
-        # check if this event is in the current month
+
+        # we only want to count events that belong to the month we are showing
         if dt.year == year and dt.month == month:
-            # increment the count for this day
             if dt.day in evtCounts:
                 evtCounts[dt.day] = evtCounts[dt.day] + 1
             else:
                 evtCounts[dt.day] = 1
 
-    # build the weeks list for the calendar grid
-    # each week is a list of day objects with a day number and event count
+    # pycalendar.monthcalendar gives us a list of weeks where each week is a list of 7 day numbers
     weeks = []
     for week in pycalendar.monthcalendar(year, month):
         row = []
         for d in week:
-            # pycalendar uses 0 for days outside the month
+            # pycalendar uses 0 for days that are outside the current month
+            # we convert those to None so the template can show blank cells
             if d != 0:
                 dayVal = d
             else:
                 dayVal = None
-            row.append({"day": dayVal, "count": evtCounts.get(d, 0)})
+
+            # if the day number is not in evtCounts it means zero events happened on that day
+            if d in evtCounts:
+                dayCount = evtCounts[d]
+            else:
+                dayCount = 0
+            row.append({"day": dayVal, "count": dayCount})
         weeks.append(row)
 
+    # give back the finished structure with a human readable month label and the weeks grid
     return {
         "month_label": f"{pycalendar.month_name[month]} {year}",
         "weeks": weeks,
     }
 
+# ========================= Rendering =========================
 
-def guest_nav():
-    return []
+# this is a wrapper around render_template that makes sure we always pass the same standard stuff
+# ctx is a special python thing that captures any extra keyword arguments and passes them along
+# it gives back the rendered HTML string from the template
+def render_page(title, template, **ctx):
+    return render_template(template, title=title, **ctx)
 
+# ========================= User Helpers =========================
 
-def features_nav():
-    # check if someone is logged in
-    # we show different nav items depending on whether they are logged in or not
-    if _ui_user():
-        return [
-            {"label": "Calendars", "href": url_for("ui.manage_calendars")},
-            {"label": "Events", "href": url_for("ui.manage_events")},
-            {"label": "Friends", "href": url_for("ui.manage_friends")},
-        ]
-    else:
-        return [
-            {"label": "Friends", "href": url_for("ui.login", next=url_for("ui.manage_friends"))},
-        ]
-
-
-def user_nav():
-    # build the nav links for logged in users
-    # each dict has a label and an href
-    return [
-        {"label": "Dashboard", "href": url_for("ui.dashboard", role="user")},
-        {"label": "Manage Externals", "href": url_for("ui.manage_externals")},
-        {"label": "Manage Calendars", "href": url_for("ui.manage_calendars")},
-        {"label": "Manage Friends", "href": url_for("ui.manage_friends")},
-        {"label": "Remove Account", "href": url_for("ui.remove_account")},
-    ]
-
-def admin_nav():
-    # same as user_nav but for admins
-    # admins have different pages they can go to
-    return [
-        {"label": "Dashboard", "href": url_for("ui.dashboard", role="admin")},
-        {"label": "System Logs", "href": url_for("ui.system_logs")},
-        {"label": "Notifications", "href": url_for("ui.send_notification")},
-        {"label": "Suspend User", "href": url_for("ui.suspend_user")},
-        {"label": "Unlink External Calendars", "href": url_for("ui.admin_unlink")},
-        {"label": "Manage Users", "href": url_for("ui.admin_users")},
-    ]
-
-
-def render_page(title, role, nav, template, **ctx):
-    # this just calls render_template with the standard args we always pass
-    # title, role, and nav go to every page
-    # ctx is any extra stuff the specific page needs
-    return render_template(template, title=title, role=role, nav=nav, **ctx)
-
-
-
-from models.user import User
-
-
+# this function creates a User model object from the current session user
+# we use this when we need to call methods on the User class like saving or fetching data
 def _make_ui_user() -> User:
     usr = _ui_user()
+
+    # if the key does not exist we fall back to an empty string
+    if "display_name" in usr:
+        displayName = usr["display_name"]
+    else:
+        displayName = ""
+
+    # create a User object
     return User(
         userId=usr["id"],
-        displayName=usr.get("display_name", ""),
+        displayName=displayName,
     )
 
 
+# this function takes either a user id or an email address and always gives back a user id
 def resolve_member_id(value: str):
-    from utils.supabase_client import get_supabase_client
     db = get_supabase_client()
+
+    # the @ symbol is what makes something an email address
     if "@" in value:
+        # query the users table to find the id that matches this email
         result = db.table("users").select("id").eq("email", value).limit(1).execute()
+
         if result.data:
             return result.data[0]["id"]
+        # no user found with that email so give back None
         return None
+    # if it was not an email then assume it is already a user id and just give it back
     return value
 
 
-from api.ui_routes import ui_bp  # noqa: E402: imported here to avoid circular import
-from utils.logger import get_logger_client  # noqa: E402
+# ========================= Context Processor =========================
+
+# this import is down here because putting it at the top would cause a circular import error
+from api.ui_routes import ui_bp  # noqa: E402
 
 
+# this is a Flask context processor which means Flask calls it before rendering any template
+# it injects variables so every template automatically has access to them
 @ui_bp.context_processor
 def _inject_globals():
-    # inject variables that every template can use
-    # this runs before every request so the template always has fresh data
-    active_message = None
+    # if there is no active admin notification set this to None
+    activeMsg = None
     try:
-        # Use the logger client (separate singleton) rather than get_supabase_client(),
-        # because sign_in_with_password mutates the shared client's session to the user
-        # JWT, which causes RLS to block the notifications read on subsequent requests.
+        # we use the logger client here instead of the regular Supabase client
+        # this is because sign_in_with_password changes the shared client session to the users JWT
+        # which causes Supabase RLS to block this notifications read on later requests
         db = get_logger_client() or get_supabase_client()
+        
+        # we want the newest one so we order by created_at descending
         result = (
             db.table("notifications")
             .select("message")
@@ -309,15 +324,23 @@ def _inject_globals():
             .limit(1)
             .execute()
         )
-        if result.data:
-            active_message = result.data[0].get("message")
-    except Exception:
-        # page rendering should survive if notification storage is down.
-        active_message = None
 
+        # if we got a result back grab the message text from the first row
+        if result.data:
+            firstRow = result.data[0]
+            # check that the message key actually exists before reading it
+            if "message" in firstRow:
+                activeMsg = firstRow["message"]
+            else:
+                activeMsg = None
+    except Exception:
+        # if anything goes wrong with the database we just ignore announcements
+        activeMsg = None
+
+    # return a dict of values that every template can now access directly
     return {
-        "ui_user": _ui_user(),
-        "features_nav": features_nav(),
-        "build_info": BUILD_INFO,
-        "active_message": active_message,
+        "ui_user": _ui_user(),          # ui_user is the current logged in user
+        "features_nav": features_nav(), # features_nav is the list of nav links for the hamburger menu
+        "build_info": buildInfo,        # build_info is the id shown in the footer
+        "active_message": activeMsg,    # active_message is the current system wide notification
     }

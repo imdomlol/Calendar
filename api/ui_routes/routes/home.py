@@ -4,12 +4,8 @@ from api.ui_routes.helpers import (
     _ui_user,
     _make_ui_user,
     render_page,
-    user_nav,
-    admin_nav,
-    ui_login_required,
 )
 from models.calendar import Calendar
-
 
 @ui_bp.route("/")
 def home():
@@ -31,7 +27,7 @@ def home():
         message = f"Couldn't load calendars: {e}"
 
     if not calendars:
-        return render_page("Calendar Home", "user", user_nav(), "home/no_calendars.html",
+        return render_page("Calendar Home", "home/no_calendars.html",
                            status=status, message=message)
 
     selected_calendar = next(
@@ -48,7 +44,7 @@ def home():
             message = f"Couldn't load events: {e}"
 
     return render_page(
-        "Calendar Home", "user", user_nav(), "home/calendar.html",
+        "Calendar Home", "home/calendar.html",
         calendars=calendars,
         selected_calendar_id=selected_calendar_id,
         calendar_name=selected_calendar.get("name") or "Untitled Calendar",
@@ -57,14 +53,12 @@ def home():
         message=message,
     )
 
-
 @ui_bp.route("/home")
 def brand_home():
     return redirect(url_for("ui.home"))
-
 
 @ui_bp.route("/dashboard/admin")
 def dashboard():
     if not _ui_user():
         return redirect(url_for("ui.login", next=request.path))
-    return render_page("Admin Dashboard", "admin", admin_nav(), "home/dashboard.html")
+    return render_page("Admin Dashboard", "home/dashboard.html")

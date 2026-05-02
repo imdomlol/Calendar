@@ -7,7 +7,6 @@ from api.ui_routes.helpers import (
     _make_ui_user,
     render_page,
     ui_login_required,
-    user_nav,
     _resolve_app_base_url,
     resolve_member_id,
 )
@@ -30,7 +29,7 @@ def manage_externals():
         status = "error"
         message = f"Couldn't load external connections: {e}"
     return render_page(
-        "Manage Externals", "user", user_nav(), "user/externals.html",
+        "Manage Externals", "user/externals.html",
         providers=providersList,
         status=status,
         message=message,
@@ -50,7 +49,7 @@ def manage_calendars():
         status = "error"
         message = f"Couldn't load calendars: {e}"
     return render_page(
-        "Manage Calendars", "user", user_nav(), "user/calendars.html",
+        "Manage Calendars", "user/calendars.html",
         status=status,
         message=message,
         owner_id=_ui_user()["id"],
@@ -82,13 +81,13 @@ def manage_events():
         status = "error"
         message = f"Couldn't load events: {err}"
     if not calendars:
-        return render_page("Manage Events", "user", user_nav(), "user/events_no_calendars.html",
+        return render_page("Manage Events", "user/events_no_calendars.html",
                            status=status, message=message)
     now = datetime.now()
     default_start = now.strftime("%Y-%m-%dT%H:%M")
     default_end = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
     return render_page(
-        "Manage Events", "user", user_nav(), "user/events.html",
+        "Manage Events", "user/events.html",
         status=status,
         message=message,
         calendars=calendars,
@@ -107,7 +106,7 @@ def edit_event(event_id):
     if not event or event.get("owner_id") != uid:
         return redirect(url_for("ui.manage_events", status="error", message=f"Event {event_id} not found"))
     return render_page(
-        "Edit Event", "user", user_nav(), "user/events_edit.html",
+        "Edit Event", "user/events_edit.html",
         event=event,
         status="",
         message="",
@@ -127,7 +126,7 @@ def manage_friends():
         status = "error"
         message = f"Couldn't load friends: {e}"
     return render_page(
-        "Manage Friends", "user", user_nav(), "user/friends.html",
+        "Manage Friends", "user/friends.html",
         friends=friendsList,
         status=status,
         message=message,
@@ -137,7 +136,7 @@ def manage_friends():
 @ui_bp.route("/user/remove-account")
 @ui_login_required
 def remove_account():
-    return render_page("Remove Account", "user", user_nav(), "user/remove_account.html")
+    return render_page("Remove Account", "user/remove_account.html")
 
 
 @ui_bp.route("/user/events", methods=["POST"])
