@@ -40,10 +40,19 @@ class Event:
         db = get_supabase_client()
         result = db.table("events").insert(self.to_record()).execute()
         rows = result.data or []
+
         if rows:
             newId = rows[0].get("id")
             self.id = newId
-            Event._addEventToCalendars(newId, self.calendarIds or [])
+
+            try:
+                Event._addEventToCalendars(newId, self.calendarIds or [])
+            except Exception:
+                # Event lookup uses events.calendar_ids. The calendars.events list is
+                # only a cached count/display helper, so don't fail a successful insert
+                # if that denormalized backfill is blocked or stale.
+                pass
+
         return result
 
     def remove(self) -> Any:
@@ -58,6 +67,7 @@ class Event:
     def _addEventToCalendars(eventId, calIds) -> None:
         if not eventId or not calIds:
             return
+        
         db = get_supabase_client()
         for calId in calIds:
             row = db.table("calendars").select("events").eq("id", calId).limit(1).execute()

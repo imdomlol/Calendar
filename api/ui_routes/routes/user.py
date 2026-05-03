@@ -76,7 +76,7 @@ def manage_events():
                 calendars[0],
             )
             selected_calendar_id = str(selected_calendar.get("id"))
-            events = Calendar.listEvents(selected_calendar_id)
+            events = Calendar.list_events(selected_calendar_id)
     except Exception as err:
         status = "error"
         message = f"Couldn't load events: {err}"
@@ -143,12 +143,12 @@ def remove_account():
 @ui_login_required
 def create_event():
     body = request.get_json(silent=True) or {}
-    title = body.get("title")
-    calendarIds = body.get("calendar_ids", [])
+    title = (body.get("title") or "").strip()
+    calendarIds = [str(cid) for cid in (body.get("calendar_ids") or []) if cid]
     if not title or not calendarIds:
         return jsonify({"error": "title and calendar_ids are required"}), 400
     user = _make_ui_user()
-    userCalIds = [cal["id"] for cal in user.listCalendars()]
+    userCalIds = [str(cal["id"]) for cal in user.listCalendars()]
     if not any(cid in userCalIds for cid in calendarIds):
         return jsonify({"error": "not authorized for any of the given calendars"}), 403
     event = Event(
@@ -160,7 +160,10 @@ def create_event():
         endTimestamp=body.get("end_timestamp"),
     )
     result = event.save()
-    return jsonify(result.data[0]), 201
+    rows = result.data or []
+    if rows:
+        return jsonify(rows[0]), 201
+    return jsonify(event.to_record()), 201
 
 
 @ui_bp.route("/user/events/<event_id>", methods=["PUT"])

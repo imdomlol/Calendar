@@ -6,14 +6,17 @@ from typing import Any
 from uuid import UUID
 
 
+# ========================= Helpers =========================
+
+# grab the admin DB client using the service role key so RLS doesnt block admin actions
 def _admin_db():
-    # admins need the service role key so RLS does not block admin actions.
     db = get_logger_client()
     if db is None:
         db = get_supabase_client()
     return db
 
 
+# check if a string looks like a valid UUID
 def _is_uuid(value: str) -> bool:
     try:
         UUID(str(value))
@@ -22,82 +25,94 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
+# ========================= Admin Class =========================
+
+# Admin inherits from User and gets all the regular user stuff
+# plus these extra admin only actions
 class Admin(User):
-    # Admin inherits from User and gets all the regular user stuff
-    # plus these extra admin-only actions
 
     @staticmethod
-    def suspendUserAccount(userId: str) -> Any:
+    def suspend_user_account(userId: str) -> Any:
+        # mark the account as suspended without deleting any of the users data
         db = _admin_db()
-        # mark the account as suspended without deleting the user's data.
         try:
             result = db.table("users").update({"is_suspended": True}).eq("id", userId).execute()
         except Exception as err:
-            log_event("ERROR", "admin", f"suspendUserAccount: failed to suspend user {userId}: {err}", userId=userId)
+            log_event("ERROR", "admin", f"suspend_user_account: failed to suspend user {userId}: {err}", userId=userId)
             raise
         log_event("INFO", "admin", f"admin suspended user {userId}", userId=userId)
         return result
 
     @staticmethod
-    def viewSystemLogs() -> Any:
+    def view_system_logs() -> Any:
+        # pull all log rows from the logs table
         db = _admin_db()
         result = db.table("logs").select("*").execute()
         return result.data
 
     @staticmethod
-    def sendSystemWideNotifications(message: str) -> None:
+    def send_system_wide_notifications(message: str) -> None:
         db = _admin_db()
-        # turn off old active rows so only one banner can show at a time.
+
+        # turn off any currently active notification so only one banner shows at a time
         db.table("notifications").update({"active": False}).eq("active", True).execute()
-        new_row = {"message": message, "active": True}
-        db.table("notifications").insert(new_row).execute()
+
+        newRow = {"message": message, "active": True}
+        db.table("notifications").insert(newRow).execute()
         log_event("INFO", "notification", message)
 
     @staticmethod
-    def clearActiveNotifications() -> None:
+    def clear_active_notifications() -> None:
+        # deactivate all notification rows
         db = _admin_db()
         db.table("notifications").update({"active": False}).eq("active", True).execute()
         log_event("INFO", "notification", "admin cleared active notifications")
 
     @staticmethod
-    def getActiveNotificationMessage():
+    def get_active_notification_message():
+        # grab the most recent active banner message
         db = _admin_db()
-        result = (
-            db.table("notifications")
-            .select("message")
-            .eq("active", True)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+        query = db.table("notifications")
+        query = query.select("message")
+        query = query.eq("active", True)
+        query = query.order("created_at", desc=True)
+        query = query.limit(1)
+        result = query.execute()
+
         if result.data:
             return result.data[0].get("message")
         return None
 
     @staticmethod
-    def findUserByQuery(q):
-        q = str(q).strip()
-        if not q:
+    def find_user_by_query(query):
+        # clean up whitespace before searching
+        query = str(query).strip()
+        if not query:
             return None
 
         db = _admin_db()
-        result = db.table("users").select("id, email, display_name").eq("email", q).limit(1).execute()
+
+        # try matching by email first
+        result = db.table("users").select("id, email, display_name").eq("email", query).limit(1).execute()
         if result.data:
             return result.data[0]
 
-        result = db.table("users").select("id, email, display_name").eq("display_name", q).limit(1).execute()
+        # try display name next
+        result = db.table("users").select("id, email, display_name").eq("display_name", query).limit(1).execute()
         if result.data:
             return result.data[0]
 
-        # ids are last so a display name that looks id-like still wins.
-        if _is_uuid(q):
-            result = db.table("users").select("id, email, display_name").eq("id", q).limit(1).execute()
+        # IDs are checked last so a display name that looks like a UUID still wins
+        if _is_uuid(query):
+            result = db.table("users").select("id, email, display_name").eq("id", query).limit(1).execute()
             if result.data:
                 return result.data[0]
+
         return None
 
     @staticmethod
-    def listAllUsers():
+    def list_all_users():
+        # return every user row for the admin users page
         db = _admin_db()
         result = db.table("users").select("id, email, display_name, is_admin").execute()
         if result.data:
@@ -105,24 +120,29 @@ class Admin(User):
         return []
 
     @staticmethod
-    def toggleUserAdmin(userId):
+    def toggle_user_admin(userId):
         db = _admin_db()
+
+        # look up the current admin flag for this user
         current = db.table("users").select("is_admin").eq("id", userId).limit(1).execute()
         if not current.data:
             return None
 
-        old_val = current.data[0].get("is_admin", False)
-        if old_val:
-            new_val = False
-        else:
-            new_val = True
+        oldVal = current.data[0].get("is_admin", False)
 
-        db.table("users").update({"is_admin": new_val}).eq("id", userId).execute()
-        log_event("INFO", "admin", "admin toggled is_admin on user " + str(userId) + " to " + str(new_val), userId=userId)
-        return new_val
+        # flip the value
+        if oldVal:
+            newVal = False
+        else:
+            newVal = True
+
+        db.table("users").update({"is_admin": newVal}).eq("id", userId).execute()
+        log_event("INFO", "admin", "admin toggled is_admin on user " + str(userId) + " to " + str(newVal), userId=userId)
+        return newVal
 
     @staticmethod
-    def listExternalsForUser(userId):
+    def list_externals_for_user(userId):
+        # return all external calendar rows linked to this user
         db = _admin_db()
         result = db.table("externals").select("id, provider, url").eq("user_id", userId).execute()
         if result.data:
@@ -130,22 +150,24 @@ class Admin(User):
         return []
 
     @staticmethod
-    def unlinkAllExternalCalendars(userId: str) -> Any:
+    def unlink_all_external_calendars(userId: str) -> Any:
+        # delete every external calendar row for this user
         db = _admin_db()
         result = db.table("externals").delete().eq("user_id", userId).execute()
         log_event("INFO", "admin", "admin unlinked all externals for user " + str(userId), userId=userId)
         return result
 
     @staticmethod
-    def unlinkExternalById(externalId):
+    def unlink_external_by_id(externalId):
         db = _admin_db()
-        # look up the owner so External.remove can keep provider cleanup behavior.
+
+        # look up the owner so External.remove can keep its cleanup behavior
         lookup = db.table("externals").select("id, user_id").eq("id", externalId).limit(1).execute()
         if not lookup.data:
             return False
 
-        owner_id = lookup.data[0].get("user_id")
-        ext = External(id=externalId, supabaseClient=db, userId=owner_id)
+        ownerId = lookup.data[0].get("user_id")
+        ext = External(id=externalId, supabaseClient=db, userId=ownerId)
         ext.remove(externalId)
-        log_event("INFO", "admin", "admin unlinked external " + str(externalId), userId=owner_id)
+        log_event("INFO", "admin", "admin unlinked external " + str(externalId), userId=ownerId)
         return True

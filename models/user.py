@@ -38,7 +38,7 @@ class User():
     @staticmethod
     def listEventsForCalendar(calendarId: str) -> list:
         from models.calendar import Calendar
-        return Calendar.listEvents(calendarId)
+        return Calendar.list_events(calendarId)
 
     # -------------------------
     # External calendar stuff
