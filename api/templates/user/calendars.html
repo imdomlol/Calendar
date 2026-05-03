@@ -124,7 +124,15 @@
               {% for m in cal.member_ids %}
                 <li style="font-size:12px; color:#6b7280; display:flex; align-items:center; gap:6px; margin-bottom:2px;">
                   <span style="word-break:break-all;">{{ m }}</span>
-                  {% if m == owner_id and cal.owner_id != owner_id %}
+                  {% if cal.owner_id == owner_id and m != owner_id %}
+                    <button type="button"
+                            onclick='removeMember({{ cal.id|tojson }}, {{ m|tojson }}, {{ (cal.name or "this calendar")|tojson }})'
+                            aria-label="Remove this member"
+                            title="Remove member"
+                            style="background:none; border:none; color:#dc2626; cursor:pointer; font-size:16px; line-height:1; padding:0 4px;">
+                      &times;
+                    </button>
+                  {% elif m == owner_id and cal.owner_id != owner_id %}
                     <button type="button"
                             onclick='leaveCalendar({{ cal.id|tojson }}, {{ (cal.name or "this calendar")|tojson }})'
                             aria-label="Remove yourself from this calendar"
@@ -212,6 +220,17 @@ function leaveCalendar(calId, calName) {
             window.location.reload();
         } else {
             r.json().then(function(data) { alert(data.error || 'Could not remove you from this calendar.'); });
+        }
+    });
+}
+
+function removeMember(calId, memberId, calName) {
+    if (!confirm('Remove ' + memberId + ' from ' + calName + '?')) return;
+    fetch('/ui/calendars/' + calId + '/members/' + encodeURIComponent(memberId), { method: 'DELETE' }).then(function(r) {
+        if (r.ok) {
+            window.location.reload();
+        } else {
+            r.json().then(function(data) { alert(data.error || 'Could not remove member.'); });
         }
     });
 }
