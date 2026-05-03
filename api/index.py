@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, send_from_directory, url_for
+from flask import Flask, Response, send_from_directory, url_for
 from flask import request
 
 from api.api_routes import api_bp
@@ -25,7 +25,21 @@ app.register_blueprint(ui_bp, url_prefix="/ui")
 # redirects straight to the home page
 @app.route("/")
 def welcome():
-    return redirect(url_for("ui.home"))
+    return Response(
+        """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Calendar</title>
+</head>
+<body>
+  <h1>Calendar</h1>
+  <p><a href="/ui/login">Log in</a></p>
+</body>
+</html>
+""",
+        mimetype="text/html",
+    )
 
 
 @app.route("/google04feea9b41e72013.html")
