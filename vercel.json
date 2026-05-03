@@ -1,6 +1,12 @@
 {
   "version": 2,
-  "builds": [{ "src": "api/index.py", "use": "@vercel/python" }],
-  "routes": [{ "src": "/(.*)", "dest": "api/index.py" }],
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "google04feea9b41e72013.html", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/google04feea9b41e72013.html", "dest": "/google04feea9b41e72013.html" },
+    { "src": "/(.*)", "dest": "api/index.py" }
+  ],
   "crons": [{ "path": "/api/cron/renew-subscriptions", "schedule": "0 3 * * *" }]
 }
