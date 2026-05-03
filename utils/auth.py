@@ -8,26 +8,35 @@ from flask import abort, g, request
 from utils.logger import log_event
 
 
+# ========================= Auth Decorator =========================
+
+# wraps any route that needs a logged in user
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # grab the token from the header.
-        token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        # pull the bearer token out of the authorization header
+        authHeader = request.headers.get("Authorization", "")
+        token = authHeader.removeprefix("Bearer ")
+        token = token.strip()
+
         if not token:
             log_event("WARNING", "auth", "missing token", path=request.path, method=request.method)
             abort(401)
 
-        # supabase project URL + key are required to validate
-        supabase_url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
-        supabase_key = os.environ.get("SUPABASE_KEY") or ""
-        if not supabase_url or not supabase_key:
+        # grab the Supabase URL and anon key from env
+        supabaseUrl = os.environ.get("SUPABASE_URL") or ""
+        supabaseUrl = supabaseUrl.rstrip("/")
+        supabaseKey = os.environ.get("SUPABASE_KEY") or ""
+
+        # bail early if either env var is missing
+        if not supabaseUrl or not supabaseKey:
             abort(500)
 
-        # ask supabase who this token belongs to
+        # build a request to ask Supabase who owns this token
         req = Request(
-            f"{supabase_url}/auth/v1/user",
+            f"{supabaseUrl}/auth/v1/user",
             headers={
-                "apikey": supabase_key,
+                "apikey": supabaseKey,
                 "Authorization": f"Bearer {token}",
             },
             method="GET",
@@ -35,22 +44,37 @@ def require_auth(f):
 
         try:
             with urlopen(req, timeout=15) as response:
-                status = getattr(response, "status", response.getcode())
+                # getcode is a fallback for older urllib versions that don't have .status
+                if hasattr(response, "status"):
+                    status = response.status
+                else:
+                    status = response.getcode()
+
+                # anything outside the 2xx range means Supabase rejected the token
                 if status < 200 or status >= 300:
                     log_event("WARNING", "auth", "token rejected by supabase", path=request.path, method=request.method)
                     abort(401)
-                raw = response.read().decode("utf-8")
-                user = json.loads(raw or "{}")
+
+                rawBytes = response.read()
+                raw = rawBytes.decode("utf-8")
+
+                if not raw:
+                    raw = "{}"
+                user = json.loads(raw)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            # any network or parse error counts as a failed validation
             log_event("WARNING", "auth", "token validation failed", path=request.path, method=request.method)
             abort(401)
 
-        # if supabase does not return a real user id, treat it as unauthorized
+        # make sure Supabase actually returned a user with a real id
         if not isinstance(user, dict) or not user.get("id"):
             log_event("WARNING", "auth", "token has no user id", path=request.path, method=request.method)
             abort(401)
 
-        user.setdefault("sub", user["id"])
+        # copy id into sub
+        if "sub" not in user:
+            user["sub"] = user["id"]
+
         g.user = user
         log_event("INFO", "auth", "token valid", userId=user["id"], path=request.path, method=request.method)
 

@@ -10,3 +10,4 @@ Known tasks and improvements for the Calendar project. Update this file when you
 ## Suspected Dead Code - needs review
 
 - [models/calendar.py, `remove_member`] method is defined but never called anywhere in the codebase
+- [utils/logger.py, `log_event`] `result` is assigned from the log insert but is only used by a commented debug print

@@ -3,7 +3,7 @@ from flask import Response, request
 from api.api_routes import api_bp
 from models.external import External
 from utils.logger import log_event
-from utils.renew_subscriptions import renewSubscriptions
+from utils.renew_subscriptions import renew_subscriptions
 from utils.supabase_client import get_supabase_client
 
 
@@ -264,7 +264,7 @@ def renew_subscriptions_cron():
 
     try:
         # run renewal and return the summary
-        result = renewSubscriptions(_app_base_url())
+        result = renew_subscriptions(_app_base_url())
         return result, 200
     except Exception as err:
         # log the details without exposing them through the API
