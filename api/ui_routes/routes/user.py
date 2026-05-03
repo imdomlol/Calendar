@@ -248,23 +248,26 @@ def delete_calendar(calendar_id):
 @ui_login_required
 def leave_calendar(calendar_id):
     db = get_supabase_client()
-    uid = _ui_user()["id"]
+    uid = str(_ui_user()["id"])
     existing = db.table("calendars").select("id, name, owner_id, member_ids").eq("id", calendar_id).execute()
     if not existing.data:
         return jsonify({"error": "calendar not found"}), 404
 
     cal_data = existing.data[0]
-    if cal_data["owner_id"] == uid:
+    owner_id = str(cal_data["owner_id"])
+    if owner_id == uid:
         return jsonify({"error": "calendar owners cannot remove themselves"}), 400
 
-    member_ids = cal_data.get("member_ids") or []
+    member_ids = [str(member_id) for member_id in (cal_data.get("member_ids") or [])]
     if uid not in member_ids:
         return jsonify({"error": "you are not a member of this calendar"}), 403
 
-    cal = Calendar(name=cal_data["name"], ownerId=cal_data["owner_id"])
+    cal = Calendar(name=cal_data["name"], ownerId=owner_id)
     cal.id = calendar_id
     cal.memberIds = member_ids
-    cal.remove_member(uid)
+    result = cal.remove_member(uid)
+    if not result.data:
+        return jsonify({"error": "calendar membership was not updated"}), 500
     return "", 204
 
 
@@ -283,13 +286,15 @@ def remove_calendar_member(calendar_id, member_id):
 
     cal = Calendar(name=cal_data["name"], ownerId=cal_data["owner_id"])
     cal.id = calendar_id
-    cal.memberIds = cal_data.get("member_ids") or [cal_data["owner_id"]]
+    cal.memberIds = [str(existing_member_id) for existing_member_id in (cal_data.get("member_ids") or [cal_data["owner_id"]])]
     try:
-        cal.remove_member(member_id)
+        result = cal.remove_member(str(member_id))
     except KeyError as e:
         return jsonify({"error": str(e)}), 404
     except (ValueError, Exception) as e:
         return jsonify({"error": str(e)}), 400
+    if not result.data:
+        return jsonify({"error": "calendar membership was not updated"}), 500
     return "", 204
 
 
