@@ -244,6 +244,30 @@ def delete_calendar(calendar_id):
     return "", 204
 
 
+@ui_bp.route("/user/calendars/<calendar_id>/members/me", methods=["DELETE"])
+@ui_login_required
+def leave_calendar(calendar_id):
+    db = get_supabase_client()
+    uid = _ui_user()["id"]
+    existing = db.table("calendars").select("id, name, owner_id, member_ids").eq("id", calendar_id).execute()
+    if not existing.data:
+        return jsonify({"error": "calendar not found"}), 404
+
+    cal_data = existing.data[0]
+    if cal_data["owner_id"] == uid:
+        return jsonify({"error": "calendar owners cannot remove themselves"}), 400
+
+    member_ids = cal_data.get("member_ids") or []
+    if uid not in member_ids:
+        return jsonify({"error": "you are not a member of this calendar"}), 403
+
+    cal = Calendar(name=cal_data["name"], ownerId=cal_data["owner_id"])
+    cal.id = calendar_id
+    cal.memberIds = member_ids
+    cal.remove_member(uid)
+    return "", 204
+
+
 @ui_bp.route("/user/calendars/<calendar_id>/guest-link", methods=["POST"])
 @ui_login_required
 def create_guest_link(calendar_id):

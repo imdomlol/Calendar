@@ -23,16 +23,16 @@ def require_auth(f):
             log_event("WARNING", "auth", "missing token", path=request.path, method=request.method)
             abort(401)
 
-        # grab the Supabase URL and anon key from env
+        # grab the Supabase URL and key from env
         supabaseUrl = os.environ.get("SUPABASE_URL") or ""
         supabaseUrl = supabaseUrl.rstrip("/")
         supabaseKey = os.environ.get("SUPABASE_KEY") or ""
 
-        # bail early if either env var is missing
+        # end early if either env var is missing
         if not supabaseUrl or not supabaseKey:
             abort(500)
 
-        # build a request to ask Supabase who owns this token
+        # build a request to ask Supabase who owns this
         req = Request(
             f"{supabaseUrl}/auth/v1/user",
             headers={
@@ -44,7 +44,7 @@ def require_auth(f):
 
         try:
             with urlopen(req, timeout=15) as response:
-                # getcode is a fallback for older urllib versions that don't have .status
+                # getcode is a fallback in case they don't have status
                 if hasattr(response, "status"):
                     status = response.status
                 else:
@@ -66,12 +66,12 @@ def require_auth(f):
             log_event("WARNING", "auth", "token validation failed", path=request.path, method=request.method)
             abort(401)
 
-        # make sure Supabase actually returned a user with a real id
+        # make sure Supabase returned a real id
         if not isinstance(user, dict) or not user.get("id"):
             log_event("WARNING", "auth", "token has no user id", path=request.path, method=request.method)
             abort(401)
 
-        # copy id into sub
+        # store id
         if "sub" not in user:
             user["sub"] = user["id"]
 

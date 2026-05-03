@@ -44,13 +44,6 @@ class Admin(User):
         return result
 
     @staticmethod
-    def view_system_logs() -> Any:
-        # pull all log rows from the logs table
-        db = _admin_db()
-        result = db.table("logs").select("*").execute()
-        return result.data
-
-    @staticmethod
     def send_system_wide_notifications(message: str) -> None:
         db = _admin_db()
 
@@ -148,14 +141,6 @@ class Admin(User):
         if result.data:
             return result.data
         return []
-
-    @staticmethod
-    def unlink_all_external_calendars(userId: str) -> Any:
-        # delete every external calendar row for this user
-        db = _admin_db()
-        result = db.table("externals").delete().eq("user_id", userId).execute()
-        log_event("INFO", "admin", "admin unlinked all externals for user " + str(userId), userId=userId)
-        return result
 
     @staticmethod
     def unlink_external_by_id(externalId):

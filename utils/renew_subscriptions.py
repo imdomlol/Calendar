@@ -56,6 +56,7 @@ def renew_subscriptions(appBaseUrl: str):
             renewed = renewed + 1
         except Exception as err:
             failed = failed + 1
+            
             log_event(
                 "ERROR",
                 "webhook_subscription",

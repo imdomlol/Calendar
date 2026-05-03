@@ -117,6 +117,12 @@ class Calendar:
 
     # remove a user from the member list
     def remove_member(self, delMember: str) -> Any:
+        if delMember == self.ownerId:
+            raise InvalidUserId("Cannot remove the owner from the member list")
+
+        if self.id is None:
+            raise ValueError("Calendar must be saved before removing members")
+
         if delMember not in self.memberIds:
             raise KeyError("Member not found")
 

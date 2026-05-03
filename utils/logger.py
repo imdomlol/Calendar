@@ -47,9 +47,7 @@ def log_event(level, eventType, message, userId=None, path=None, method=None, st
             print("WARNING: SUPABASE_SECRET_API_KEY not set, skipping log")
             return
 
-        result = supabaseClient.table("logs").insert(logRecord).execute()
-        # print(result)
     except Exception as error:
-        # logging errors should only show in the server output
+        # logging errors should show in the server output
         print("WARNING: could not save log to supabase - " + str(error))
         print("log was: [" + str(level) + "] " + str(eventType) + " - " + str(message))
