@@ -53,7 +53,9 @@ def settings_page():
 
         # split providers into the two tables shown on the page
         for externalRow in allExternals:
-            providerName = str(externalRow.get("provider") or "").lower()
+            # normalize the provider so text checks are simple
+            rawProvider = externalRow.get("provider") or ""
+            providerName = str(rawProvider).lower()
 
             if "google" in providerName:
                 googleRows.append(externalRow)
@@ -90,6 +92,7 @@ def settings_login_google():
     # grab the app credentials before building the OAuth request
     clientId, clientSecret = _google_oauth_config()
 
+    # both values are needed before Google can start OAuth
     if not clientId or not clientSecret:
         return redirect(
             url_for(
@@ -140,6 +143,7 @@ def settings_google_callback():
     expectedState = (session.get("google_oauth_state") or "").strip()
     returnedState = (request.args.get("state") or "").strip()
 
+    # stop if the session state is missing or different
     if not expectedState or returnedState != expectedState:
         _clear_oauth_session()
         return redirect(
@@ -156,6 +160,7 @@ def settings_google_callback():
     try:
         from requests_oauthlib import OAuth2Session
     except Exception as error:
+        # clear the partial OAuth session before showing the error
         _clear_oauth_session()
         return redirect(
             url_for(
@@ -165,6 +170,7 @@ def settings_google_callback():
             )
         )
 
+    # all three values are required to trade the code for tokens
     if not clientId or not clientSecret or not redirectUri:
         _clear_oauth_session()
         return redirect(
@@ -177,7 +183,11 @@ def settings_google_callback():
 
     try:
         # trade the callback URL for OAuth tokens
-        oauth = OAuth2Session(clientId, redirect_uri=redirectUri, state=expectedState)
+        oauth = OAuth2Session(
+            clientId,
+            redirect_uri=redirectUri,
+            state=expectedState,
+        )
         creds = oauth.fetch_token(
             "https://oauth2.googleapis.com/token",
             client_secret=clientSecret,
@@ -201,9 +211,15 @@ def settings_google_callback():
                 accessToken=creds.get("access_token"),
                 refreshToken=creds.get("refresh_token"),
             )
-            ext.register_subscription(existing["id"], appBaseUrl, clientId, clientSecret)
+            ext.register_subscription(
+                existing["id"],
+                appBaseUrl,
+                clientId,
+                clientSecret,
+            )
             message = "Google connection refreshed."
         else:
+            # make a new external row when the user has no saved Google link
             ext = External(id=None, supabaseClient=db, userId=userId)
             result = ext.save(
                 url=providerUrl,
@@ -215,6 +231,7 @@ def settings_google_callback():
             resultRows = result.data or [{}]
             createdId = resultRows[0].get("id")
 
+            # the saved row must have an id so the webhook can be registered
             if not createdId:
                 raise RuntimeError("Google connection was saved without an id")
 
@@ -225,6 +242,7 @@ def settings_google_callback():
         return redirect(url_for("ui.settings_page", status="ok", message=message))
 
     except Exception as error:
+        # clear this login attempt if anything in the callback fails
         _clear_oauth_session()
         return redirect(
             url_for(
@@ -238,22 +256,23 @@ def settings_google_callback():
 # ========================= Google Sync Routes =========================
 
 
-@ui_bp.route("/settings/external/google/<external_id>/sync", methods=["POST"])
+@ui_bp.route("/settings/external/google/<externalId>/sync", methods=["POST"])
 @ui_login_required
-def settings_sync_google(external_id):
+def settings_sync_google(externalId):
     # sync from Google into this app
     userId = _ui_user()["id"]
     clientId, clientSecret = _google_oauth_config()
 
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, supabaseClient=db, userId=userId)
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
         result = ext.pull_cal_data(
-            external_id,
+            externalId,
             client_id=clientId,
             client_secret=clientSecret,
         )
 
+        # show a clearer message when the provider returned a known error
         if "error" in result:
             message = _sync_error_message(result["error"], "Google")
             return redirect(url_for("ui.settings_page", status="error", message=message))
@@ -267,27 +286,29 @@ def settings_sync_google(external_id):
             )
         )
     except Exception as error:
+        # send unexpected sync errors back to the settings page
         return redirect(
             url_for("ui.settings_page", status="error", message=f"Sync failed: {error}")
         )
 
 
-@ui_bp.route("/settings/external/google/<external_id>/push", methods=["POST"])
+@ui_bp.route("/settings/external/google/<externalId>/push", methods=["POST"])
 @ui_login_required
-def settings_push_google(external_id):
+def settings_push_google(externalId):
     # push local event changes back to Google
     userId = _ui_user()["id"]
     clientId, clientSecret = _google_oauth_config()
 
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, supabaseClient=db, userId=userId)
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
         result = ext.push_cal_data(
-            external_id,
+            externalId,
             client_id=clientId,
             client_secret=clientSecret,
         )
 
+        # turn known token errors into friendlier page text
         if "error" in result:
             message = _sync_error_message(result["error"], "Google")
             return redirect(url_for("ui.settings_page", status="error", message=message))
@@ -301,6 +322,7 @@ def settings_push_google(external_id):
             )
         )
     except Exception as error:
+        # report the push problem without leaving this page
         return redirect(
             url_for("ui.settings_page", status="error", message=f"Push failed: {error}")
         )
@@ -321,6 +343,7 @@ def settings_login_outlook():
     # grab Microsoft credentials for the OAuth flow
     clientId, clientSecret = _outlook_oauth_config()
 
+    # Microsoft needs both OAuth settings before redirecting
     if not clientId or not clientSecret:
         return redirect(
             url_for(
@@ -370,6 +393,7 @@ def settings_outlook_callback():
     expectedState = (session.get("outlook_oauth_state") or "").strip()
     returnedState = (request.args.get("state") or "").strip()
 
+    # reject callbacks that do not match this browser session
     if not expectedState or returnedState != expectedState:
         _clear_outlook_oauth_session()
         return redirect(
@@ -386,6 +410,7 @@ def settings_outlook_callback():
     try:
         from requests_oauthlib import OAuth2Session
     except Exception as error:
+        # clear the saved callback details before leaving
         _clear_outlook_oauth_session()
         return redirect(
             url_for(
@@ -395,6 +420,7 @@ def settings_outlook_callback():
             )
         )
 
+    # the callback cannot finish without credentials and the redirect URI
     if not clientId or not clientSecret or not redirectUri:
         _clear_outlook_oauth_session()
         return redirect(
@@ -407,7 +433,11 @@ def settings_outlook_callback():
 
     try:
         # trade the Microsoft callback URL for tokens
-        oauth = OAuth2Session(clientId, redirect_uri=redirectUri, state=expectedState)
+        oauth = OAuth2Session(
+            clientId,
+            redirect_uri=redirectUri,
+            state=expectedState,
+        )
         creds = oauth.fetch_token(
             "https://login.microsoftonline.com/common/oauth2/v2.0/token",
             client_secret=clientSecret,
@@ -431,9 +461,15 @@ def settings_outlook_callback():
                 accessToken=creds.get("access_token"),
                 refreshToken=creds.get("refresh_token"),
             )
-            ext.register_subscription(existing["id"], appBaseUrl, clientId, clientSecret)
+            ext.register_subscription(
+                existing["id"],
+                appBaseUrl,
+                clientId,
+                clientSecret,
+            )
             message = "Outlook connection refreshed."
         else:
+            # save a fresh Outlook connection for this user
             ext = External(id=None, supabaseClient=db, userId=userId)
             result = ext.save(
                 url=providerUrl,
@@ -445,6 +481,7 @@ def settings_outlook_callback():
             resultRows = result.data or [{}]
             createdId = resultRows[0].get("id")
 
+            # subscription setup needs the id from the new row
             if not createdId:
                 raise RuntimeError("Outlook connection was saved without an id")
 
@@ -455,6 +492,7 @@ def settings_outlook_callback():
         return redirect(url_for("ui.settings_page", status="ok", message=message))
 
     except Exception as error:
+        # clean up any temporary OAuth state after a callback error
         _clear_outlook_oauth_session()
         return redirect(
             url_for(
@@ -468,22 +506,23 @@ def settings_outlook_callback():
 # ========================= Outlook Sync Routes =========================
 
 
-@ui_bp.route("/settings/external/outlook/<external_id>/sync", methods=["POST"])
+@ui_bp.route("/settings/external/outlook/<externalId>/sync", methods=["POST"])
 @ui_login_required
-def settings_sync_outlook(external_id):
+def settings_sync_outlook(externalId):
     # sync Outlook calendar data into this app
     userId = _ui_user()["id"]
     clientId, clientSecret = _outlook_oauth_config()
 
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, supabaseClient=db, userId=userId)
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
         result = ext.pull_cal_data(
-            external_id,
+            externalId,
             client_id=clientId,
             client_secret=clientSecret,
         )
 
+        # make known provider errors easier to read
         if "error" in result:
             message = _sync_error_message(result["error"], "Outlook")
             return redirect(url_for("ui.settings_page", status="error", message=message))
@@ -497,27 +536,29 @@ def settings_sync_outlook(external_id):
             )
         )
     except Exception as error:
+        # keep the error visible on the settings page
         return redirect(
             url_for("ui.settings_page", status="error", message=f"Sync failed: {error}")
         )
 
 
-@ui_bp.route("/settings/external/outlook/<external_id>/push", methods=["POST"])
+@ui_bp.route("/settings/external/outlook/<externalId>/push", methods=["POST"])
 @ui_login_required
-def settings_push_outlook(external_id):
-    # push this apps events back to Outlook
+def settings_push_outlook(externalId):
+    # push this app events back to Outlook
     userId = _ui_user()["id"]
     clientId, clientSecret = _outlook_oauth_config()
 
     try:
         db = get_supabase_client()
-        ext = External(id=external_id, supabaseClient=db, userId=userId)
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
         result = ext.push_cal_data(
-            external_id,
+            externalId,
             client_id=clientId,
             client_secret=clientSecret,
         )
 
+        # show the friendly version of known push errors
         if "error" in result:
             message = _sync_error_message(result["error"], "Outlook")
             return redirect(url_for("ui.settings_page", status="error", message=message))
@@ -531,6 +572,7 @@ def settings_push_outlook(external_id):
             )
         )
     except Exception as error:
+        # report the unexpected push failure to the user
         return redirect(
             url_for("ui.settings_page", status="error", message=f"Push failed: {error}")
         )

@@ -39,10 +39,10 @@ def login():
             error = "Email and password are required"
         else:
             try:
-                authDb = _make_auth_client()
+                calDb = get_supabase_client()
 
                 # send the credentials to Supabase
-                result = authDb.auth.sign_in_with_password(
+                result = calDb.auth.sign_in_with_password(
                     {"email": email, "password": password}
                 )
 
@@ -67,8 +67,7 @@ def login():
                     isAdmin = False
                     isSuspended = False
                     try:
-                        db = get_supabase_client()
-                        userQuery = db.table("users")
+                        userQuery = calDb.table("users")
                         userQuery = userQuery.select("is_admin, is_suspended")
                         userQuery = userQuery.eq("id", uid)
                         userResult = userQuery.limit(1).execute()
@@ -159,7 +158,7 @@ def register():
             error = "PASSWORDS DON'T MATCH"
         else:
             try:
-                authDb = _make_auth_client()
+                calDb = get_supabase_client()
                 appBaseUrl = _resolve_app_base_url()
 
                 # build the signup options and set where Supabase should redirect after email confirmation
@@ -168,7 +167,7 @@ def register():
                 if name:
                     options["data"] = {"name": name}
 
-                authDb.auth.sign_up(
+                calDb.auth.sign_up(
                     {"email": email, "password": password, "options": options}
                 )
                 log_event(

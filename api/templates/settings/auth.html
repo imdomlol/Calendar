@@ -40,10 +40,10 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form method="POST" action="{{ url_for('ui.settings_sync_google', external_id=row.id) }}" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_sync_google', externalId=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form method="POST" action="{{ url_for('ui.settings_push_google', external_id=row.id) }}" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_push_google', externalId=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
             <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
@@ -72,10 +72,10 @@
           <td class="cell-truncate" title="{{ row.url }}">{{ row.url }}</td>
           <td class="cell-truncate cell-mono" title="{{ row.id }}">{{ row.id }}</td>
           <td class="cell-actions">
-            <form method="POST" action="{{ url_for('ui.settings_sync_outlook', external_id=row.id) }}" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_sync_outlook', externalId=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Pull</button>
             </form>
-            <form method="POST" action="{{ url_for('ui.settings_push_outlook', external_id=row.id) }}" style="margin:0;">
+            <form method="POST" action="{{ url_for('ui.settings_push_outlook', externalId=row.id) }}" style="margin:0;">
               <button type="submit" class="btn btn-sm" style="border:none; cursor:pointer; margin-top:0;">Push</button>
             </form>
             <button class="btn btn-sm danger" style="border:none; cursor:pointer; margin-top:0;"
