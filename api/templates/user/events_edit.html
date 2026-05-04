@@ -27,14 +27,14 @@
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Start</label>
       <input id="edit-start" type="datetime-local"
-             value="{{ event.start_timestamp[:16] if event.start_timestamp else '' }}"
+             data-utc="{{ event.start_timestamp or '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
     <div>
       <label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">End</label>
       <input id="edit-end" type="datetime-local"
-             value="{{ event.end_timestamp[:16] if event.end_timestamp else '' }}"
+             data-utc="{{ event.end_timestamp or '' }}"
              style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; box-sizing:border-box;" />
     </div>
 
@@ -46,6 +46,24 @@
 </div>
 
 <script>
+// Convert a UTC timestamp string to the format datetime-local expects (local time)
+function toDatetimeLocal(utcStr) {
+    if (!utcStr) return '';
+    var d = new Date(utcStr);
+    if (isNaN(d.getTime())) return '';
+    var offset = d.getTimezoneOffset() * 60000;
+    var local = new Date(d.getTime() - offset);
+    return local.toISOString().slice(0, 16);
+}
+
+// Pre-fill inputs with the user's local time equivalent of the stored UTC value
+(function() {
+    var startInput = document.getElementById('edit-start');
+    var endInput = document.getElementById('edit-end');
+    startInput.value = toDatetimeLocal(startInput.getAttribute('data-utc'));
+    endInput.value = toDatetimeLocal(endInput.getAttribute('data-utc'));
+})();
+
 function saveEvent(eventId) {
     var title = document.getElementById('edit-title').value.trim();
     var description = document.getElementById('edit-description').value.trim();
@@ -61,8 +79,8 @@ function saveEvent(eventId) {
         body: JSON.stringify({
             title: title,
             description: description,
-            start_timestamp: start,
-            end_timestamp: end
+            start_timestamp: start ? new Date(start).toISOString() : null,
+            end_timestamp: end ? new Date(end).toISOString() : null
         })
     }).then(function(r) {
         if (r.ok) {

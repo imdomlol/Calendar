@@ -97,8 +97,8 @@ function addEvent() {
             title: title,
             calendar_ids: [calId],
             description: description,
-            start_timestamp: start,
-            end_timestamp: end
+            start_timestamp: start ? new Date(start).toISOString() : null,
+            end_timestamp: end ? new Date(end).toISOString() : null
         })
     }).then(function(r) {
         if (r.ok) {
