@@ -134,16 +134,19 @@ class User():
 
 
     # delete the user row and then ask Supabase auth to delete the auth user
-    def remove_account(self, accessToken: str) -> None:
+    def remove_account(self) -> None:
         db = get_supabase_client()
         db.table("users").delete().eq("id", self.userId).execute()
 
+        # use the admin endpoint with the service role key so the auth record
+        # is always deleted regardless of project "allow user deletion" setting
         supabaseUrl = os.getenv("SUPABASE_URL")
+        serviceKey = os.getenv("SUPABASE_SECRET_API_KEY", "")
         requests.delete(
-            f"{supabaseUrl}/auth/v1/user",
+            f"{supabaseUrl}/auth/v1/admin/users/{self.userId}",
             headers={
-                "Authorization": f"Bearer {accessToken}",
-                "apikey": os.getenv("SUPABASE_KEY", ""),
+                "Authorization": f"Bearer {serviceKey}",
+                "apikey": serviceKey,
             },
         )
 

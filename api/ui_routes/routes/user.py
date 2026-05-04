@@ -1,6 +1,6 @@
 import secrets
 
-from flask import jsonify, redirect, request, url_for
+from flask import jsonify, redirect, request, session, url_for
 
 from api.ui_routes import ui_bp
 from api.ui_routes.helpers import (
@@ -618,9 +618,9 @@ def remove_friend(friend_id):
 @ui_bp.route("/user/me", methods=["DELETE"])
 @ui_login_required
 def delete_me():
-    user_info = _ui_user()
     user = _make_ui_user()
-    user.remove_account(user_info.get("access_token"))
+    user.remove_account()
+    session.pop("ui_user", None)
     return "", 204
 
 
