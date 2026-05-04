@@ -1,132 +1,153 @@
+import os
+
+import requests
+
 from utils.supabase_client import get_supabase_client
-from typing import Any
+
+
+# ========================= User Model =========================
 
 
 class User():
+    # set up the user object with the main profile fields
     def __init__(self, userId: str, displayName: str) -> None:
         self.userId = userId
         self.displayName = displayName
 
-    # -------------------------
-    # Calendar stuff
-    # -------------------------
 
-    def listCalendars(self) -> list:
-        # get all calendars this user owns or is a member of in a single query
+    # ========================= Calendar Methods =========================
+
+
+    # list calendars owned by this user or shared with this user
+    def list_calendars(self) -> list:
         db = get_supabase_client()
-        result = db.table("calendars").select("*").or_(
-            f"owner_id.eq.{self.userId},member_ids.cs.{{{self.userId}}}"
-        ).execute()
+
+        # Supabase filters both owner and member matches in one query
+        filterText = f"owner_id.eq.{self.userId},member_ids.cs.{{{self.userId}}}"
+        query = db.table("calendars")
+        query = query.select("*")
+        query = query.or_(filterText)
+        result = query.execute()
+
         return result.data or []
 
-    # -------------------------
-    # Event stuff
-    # -------------------------
 
-    def listEvents(self) -> list:
-        # get all events across the user's calendars in 2 queries instead of 3
-        db = get_supabase_client()
-        cal_result = db.table("calendars").select("id").or_(
-            f"owner_id.eq.{self.userId},member_ids.cs.{{{self.userId}}}"
-        ).execute()
-        calIds = [c["id"] for c in (cal_result.data or [])]
-        if not calIds:
-            return []
-        result = db.table("events").select("*").overlaps("calendar_ids", calIds).execute()
-        return result.data or []
+    # ========================= External Calendar Methods =========================
 
-    @staticmethod
-    def listEventsForCalendar(calendarId: str) -> list:
-        from models.calendar import Calendar
-        return Calendar.list_events(calendarId)
 
-    # -------------------------
-    # External calendar stuff
-    # -------------------------
-
-    def listExternals(self) -> list:
-        # get all external calendar connections for this user
+    # list external calendar connections for this user
+    def list_externals(self) -> list:
         db = get_supabase_client()
         result = db.table("externals").select("*").eq("user_id", self.userId).execute()
+
         return result.data or []
 
-    # -------------------------
-    # Friend stuff
-    # -------------------------
 
-    def listFriends(self) -> list:
-        # get the friends list (IDs) from the database
+    # ========================= Friend Methods =========================
+
+
+    # get the raw friend ids from the user record
+    def list_friends(self) -> list:
         db = get_supabase_client()
         result = db.table("users").select("friends").eq("id", self.userId).execute()
+
         if not result.data:
             return []
+
         return result.data[0].get("friends") or []
 
-    def listFriendsData(self) -> list:
-        # resolve friend IDs to full user records
-        friendIds = self.listFriends()
+
+    # turn friend ids into full user rows
+    def list_friends_data(self) -> list:
+        friendIds = self.list_friends()
+
         if not friendIds:
             return []
+
         db = get_supabase_client()
-        result = db.table("users").select("id, email, display_name").in_("id", friendIds).execute()
+        result = (
+            db.table("users")
+            .select("id, email, display_name")
+            .in_("id", friendIds)
+            .execute()
+        )
+
         return result.data or []
 
-    def addFriend(self, friendId: str = None, email: str = None, value: str = None) -> list:
-        # resolve friendId from email, display_name, or treat the raw value as an id
+
+    # add a friend by id email or display name
+    def add_friend(self, friendId: str = None, email: str = None, value: str = None) -> list:
         db = get_supabase_client()
         lookup = email or value
+
+        # find the friend id from email or display name when needed
         if friendId is None and lookup is not None:
-            r = db.table("users").select("id").eq("email", lookup).limit(1).execute()
-            if r.data:
-                friendId = r.data[0]["id"]
+            emailResult = db.table("users").select("id").eq("email", lookup).limit(1).execute()
+
+            if emailResult.data:
+                friendId = emailResult.data[0]["id"]
             else:
-                r = db.table("users").select("id").eq("display_name", lookup).limit(1).execute()
-                if r.data:
-                    friendId = r.data[0]["id"]
+                nameResult = (
+                    db.table("users")
+                    .select("id")
+                    .eq("display_name", lookup)
+                    .limit(1)
+                    .execute()
+                )
+
+                if nameResult.data:
+                    friendId = nameResult.data[0]["id"]
                 else:
                     friendId = lookup
 
         if friendId is None:
             raise ValueError("friend_id, email, or display name is required")
 
-        # cant add yourself
+        # stop a user from adding their own account
         if friendId == self.userId:
             raise ValueError("User cannot add themselves as a friend")
 
-        # load current friends list from the database
-        currentFriends = self.listFriends()
+        currentFriends = self.list_friends()
 
-        # check if already friends
         if friendId in currentFriends:
             raise ValueError(f"User {friendId} is already a friend")
 
-        # add the new friend and save to the database
         currentFriends.append(friendId)
         db.table("users").update({"friends": currentFriends}).eq("id", self.userId).execute()
+
         return currentFriends
 
-    def removeFriend(self, friendId: str) -> None:
-        # load current friends list from the database
+
+    # remove a friend id from the users friend list
+    def remove_friend(self, friendId: str) -> None:
         db = get_supabase_client()
-        currentFriends = self.listFriends()
+        currentFriends = self.list_friends()
 
         if friendId not in currentFriends:
             raise ValueError(f"User {friendId} is not in the friends list")
 
-        # remove and save to the database
         currentFriends.remove(friendId)
         db.table("users").update({"friends": currentFriends}).eq("id", self.userId).execute()
 
-    # -------------------------
-    # Account stuff
-    # -------------------------
 
-    def removeAccount(self) -> Any:
+    # ========================= Account Methods =========================
+
+
+    # delete the user row and then ask Supabase auth to delete the auth user
+    def remove_account(self, accessToken: str) -> None:
         db = get_supabase_client()
-        result = db.table("users").delete().eq("id", self.userId).execute()
-        # also remove from Supabase auth so the user can't log back in
-        db.auth.admin.delete_user(self.userId)
-        return result
+        db.table("users").delete().eq("id", self.userId).execute()
 
+        supabaseUrl = os.getenv("SUPABASE_URL")
+        requests.delete(
+            f"{supabaseUrl}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {accessToken}",
+                "apikey": os.getenv("SUPABASE_KEY", ""),
+            },
+        )
+
+
+    # show the display name when debugging a user object
     def __repr__(self) -> str:
         return f"<User: {self.displayName}>"

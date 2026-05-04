@@ -49,7 +49,7 @@ def settings_page():
     try:
         # load the connected external accounts for this user
         uiUser = _make_ui_user()
-        allExternals = uiUser.listExternals()
+        allExternals = uiUser.list_externals()
 
         # split providers into the two tables shown on the page
         for externalRow in allExternals:

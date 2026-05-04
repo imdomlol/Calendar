@@ -74,7 +74,7 @@ def guest_create_event(token):
     # keep the calendar record in sync with this event
     eventId = newEventRow.get("id")
     eventCalendarIds = newEventRow.get("calendar_ids") or []
-    Event._addEventToCalendars(eventId, eventCalendarIds)
+    Event.add_to_cal(eventId, eventCalendarIds)
     return newEventRow, 201
 
 
@@ -157,5 +157,5 @@ def guest_delete_event(token, eventId):
     db.table("events").delete().eq("id", eventId).execute()
 
     # remove the event id from every linked calendar
-    Event._removeEventFromCalendars(eventId, eventCalendarIds)
+    Event.rm_from_cal(eventId, eventCalendarIds)
     return "", 204

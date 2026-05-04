@@ -94,11 +94,11 @@ def send_notification():
         # read the admin message from the form
         message = request.form.get("message", "").strip()
         if message:
-            Admin.send_system_wide_notifications(message)
+            Admin.sys_notif(message)
         return redirect(url_for("ui.send_notification"))
 
     # fetch the current banner text for the page
-    activeMessage = Admin.get_active_notification_message()
+    activeMessage = Admin.get_notif()
 
     return render_page(
         "Notifications",
@@ -111,7 +111,7 @@ def send_notification():
 @ui_bp.route("/admin/notifications/clear", methods=["POST"])
 @ui_admin_required
 def clear_notification():
-    Admin.clear_active_notifications()
+    Admin.clear_notif()
 
     # redirect to clear notif from admin view
     return redirect(url_for("ui.send_notification"))
@@ -129,12 +129,12 @@ def suspend_user():
         if userId:
             adminUser = _make_ui_user()
             admin = Admin(userId=adminUser.userId, displayName=adminUser.displayName)
-            admin.suspend_user_account(userId)
+            admin.suspend_acc(userId)
         return redirect(url_for("ui.suspend_user"))
 
     # q can be an email display name or id
     queryText = request.args.get("q", "").strip()
-    targetUser = Admin.find_user_by_query(queryText)
+    targetUser = Admin.find_user(queryText)
 
     return render_page(
         "Suspend User",
@@ -156,7 +156,7 @@ def admin_users():
 @ui_bp.route("/admin/users/<userId>/toggle-admin", methods=["POST"])
 @ui_admin_required
 def admin_toggle_admin(userId):
-    newValue = Admin.toggle_user_admin(userId)
+    newValue = Admin.op(userId)
 
     if newValue is None:
         return jsonify({"error": "User not found"}), 404
@@ -171,11 +171,11 @@ def admin_toggle_admin(userId):
 @ui_admin_required
 def admin_unlink():
     queryText = request.args.get("q", "").strip()
-    targetUser = Admin.find_user_by_query(queryText)
+    targetUser = Admin.find_user(queryText)
     externals = []
 
     if targetUser:
-        externals = Admin.list_externals_for_user(targetUser["id"])
+        externals = Admin.list_externs(targetUser["id"])
 
     return render_page(
         "Unlink External Calendars",
@@ -190,7 +190,7 @@ def admin_unlink():
 @ui_bp.route("/admin/unlink/<externalId>", methods=["POST"])
 @ui_admin_required
 def admin_unlink_external(externalId):
-    wasUnlinked = Admin.unlink_external_by_id(externalId)
+    wasUnlinked = Admin.rm_extern_id(externalId)
 
     if not wasUnlinked:
         return jsonify({"error": "External not found"}), 404

@@ -32,7 +32,7 @@ def manage_externals():
     try:
         # load this users connected providers
         uiUser = _make_ui_user()
-        providersList = uiUser.listExternals()
+        providersList = uiUser.list_externals()
     except Exception as error:
         status = "error"
         message = f"Couldn't load external connections: {error}"
@@ -57,7 +57,7 @@ def manage_calendars():
     try:
         # ask the model for calendars attached to this account
         uiUser = _make_ui_user()
-        records = uiUser.listCalendars()
+        records = uiUser.list_calendars()
     except Exception as error:
         status = "error"
         message = f"Couldn't load calendars: {error}"
@@ -86,7 +86,7 @@ def manage_events():
 
     try:
         uiUser = _make_ui_user()
-        calendars = uiUser.listCalendars()
+        calendars = uiUser.list_calendars()
 
         if calendars:
             selectedCalendar = calendars[0]
@@ -165,7 +165,7 @@ def manage_friends():
 
     try:
         uiUser = _make_ui_user()
-        friendsList = uiUser.listFriendsData()
+        friendsList = uiUser.list_friends_data()
     except Exception as error:
         status = "error"
         message = f"Couldn't load friends: {error}"
@@ -209,7 +209,7 @@ def create_event():
     userCalIds = []
 
     # collect the calendar ids the user is allowed to write to
-    for calendar in user.listCalendars():
+    for calendar in user.list_calendars():
         userCalIds.append(str(calendar["id"]))
 
     hasAllowedCalendar = False
@@ -252,7 +252,7 @@ def update_event(event_id):
     user = _make_ui_user()
     userCalIds = []
 
-    for calendar in user.listCalendars():
+    for calendar in user.list_calendars():
         userCalIds.append(calendar["id"])
 
     canEditEvent = False
@@ -313,7 +313,7 @@ def delete_event(event_id):
     user = _make_ui_user()
     userCalIds = []
 
-    for calendar in user.listCalendars():
+    for calendar in user.list_calendars():
         userCalIds.append(calendar["id"])
 
     canDeleteEvent = False
@@ -595,7 +595,7 @@ def add_friend():
     user = _make_ui_user()
 
     try:
-        friends = user.addFriend(
+        friends = user.add_friend(
             friendId=body.get("friend_id"),
             email=body.get("email"),
             value=body.get("value"),
@@ -613,7 +613,7 @@ def remove_friend(friend_id):
     user = _make_ui_user()
 
     try:
-        user.removeFriend(friend_id)
+        user.remove_friend(friend_id)
     except ValueError as error:
         return jsonify({"error": str(error)}), 404
 
@@ -626,10 +626,9 @@ def remove_friend(friend_id):
 @ui_bp.route("/user/me", methods=["DELETE"])
 @ui_login_required
 def delete_me():
-    # delete the current users account
+    user_info = _ui_user()
     user = _make_ui_user()
-    user.removeAccount()
-
+    user.remove_account(user_info.get("access_token"))
     return "", 204
 
 

@@ -2,7 +2,11 @@ from utils.supabase_client import get_supabase_client
 from typing import Any
 
 
+# ========================= Event Model =========================
+
+
 class Event:
+    # make a new local event object before saving it
     def __init__(
         self,
         title: str,
@@ -21,6 +25,7 @@ class Event:
         self.endTimestamp = endTimestamp
         self.ageTimestamp: str | None = None
 
+    # turn this event into a Supabase row
     def to_record(self) -> dict[str, Any]:
         rec = {
             "owner_id": self.ownerId,
@@ -36,9 +41,14 @@ class Event:
             rec["age_timestamp"] = self.ageTimestamp
         return rec
 
+    # save this event and link it to calendars
     def save(self) -> Any:
         db = get_supabase_client()
-        result = db.table("events").insert(self.to_record()).execute()
+
+        # insert the event row first
+        query = db.table("events")
+        query = query.insert(self.to_record())
+        result = query.execute()
         rows = result.data or []
 
         if rows:
@@ -46,64 +56,112 @@ class Event:
             self.id = newId
 
             try:
-                Event._addEventToCalendars(newId, self.calendarIds or [])
+                # keep the cached calendar event lists updated
+                Event.add_to_cal(newId, self.calendarIds or [])
             except Exception:
-                # Event lookup uses events.calendar_ids. The calendars.events list is
-                # only a cached count/display helper, so don't fail a successful insert
-                # if that denormalized backfill is blocked or stale.
+                # event lookup uses events calendar_ids
+                # calendars events is only used for display
+                # a cache issue should not break the insert
                 pass
 
         return result
 
+    # remove this event from the database
     def remove(self) -> Any:
         if self.id is None:
             raise ValueError("Event must be saved before it can be removed")
+
         db = get_supabase_client()
-        result = db.table("events").delete().match({"id": self.id}).execute()
-        Event._removeEventFromCalendars(self.id, self.calendarIds or [])
+
+        # delete the event row
+        query = db.table("events")
+        query = query.delete()
+        query = query.match({"id": self.id})
+        result = query.execute()
+
+        # also clean up each calendar cache
+        Event.rm_from_cal(self.id, self.calendarIds or [])
         return result
 
     @staticmethod
-    def _addEventToCalendars(eventId, calIds) -> None:
+    # add this event id to every linked calendar
+    def add_to_cal(eventId, calIds) -> None:
         if not eventId or not calIds:
             return
-        
+
         db = get_supabase_client()
         for calId in calIds:
-            row = db.table("calendars").select("events").eq("id", calId).limit(1).execute()
+            # load the current cached event ids for this calendar
+            query = db.table("calendars")
+            query = query.select("events")
+            query = query.eq("id", calId)
+            query = query.limit(1)
+            row = query.execute()
+
             if not row.data:
                 continue
+
             current = row.data[0].get("events") or []
             if eventId not in current:
                 current.append(eventId)
-                db.table("calendars").update({"events": current}).eq("id", calId).execute()
+
+                # write back the cache with the new event id
+                updateQuery = db.table("calendars")
+                updateQuery = updateQuery.update({"events": current})
+                updateQuery = updateQuery.eq("id", calId)
+                updateQuery.execute()
 
     @staticmethod
-    def _removeEventFromCalendars(eventId, calIds) -> None:
+    # remove this event id from every linked calendar
+    def rm_from_cal(eventId, calIds) -> None:
         if not eventId or not calIds:
             return
+
         db = get_supabase_client()
         for calId in calIds:
-            row = db.table("calendars").select("events").eq("id", calId).limit(1).execute()
+            # read the cached ids before changing them
+            query = db.table("calendars")
+            query = query.select("events")
+            query = query.eq("id", calId)
+            query = query.limit(1)
+            row = query.execute()
+
             if not row.data:
                 continue
+
             current = row.data[0].get("events") or []
             if eventId in current:
                 current.remove(eventId)
-                db.table("calendars").update({"events": current}).eq("id", calId).execute()
+
+                # save the smaller cached list
+                updateQuery = db.table("calendars")
+                updateQuery = updateQuery.update({"events": current})
+                updateQuery = updateQuery.eq("id", calId)
+                updateQuery.execute()
 
     @staticmethod
+    # find one event row by id
     def find(eventId: str) -> dict | None:
         db = get_supabase_client()
-        result = db.table("events").select("*").eq("id", eventId).limit(1).execute()
+
+        # ask Supabase for only this event
+        query = db.table("events")
+        query = query.select("*")
+        query = query.eq("id", eventId)
+        query = query.limit(1)
+        result = query.execute()
         rows = result.data or []
+
         if rows:
             return rows[0]
         return None
 
+    # update fields on a saved event
     def edit(self, title=None, description=None, startTimestamp=None, endTimestamp=None, calendarIds=None) -> Any:
         if self.id is None:
             raise ValueError("Event must be saved before it can be edited")
+
+        # build only the fields the caller wants to change
         updates = {}
         if title is not None:
             updates["title"] = title
@@ -115,14 +173,33 @@ class Event:
             updates["end_timestamp"] = endTimestamp
         if calendarIds is not None:
             updates["calendar_ids"] = calendarIds
+
         db = get_supabase_client()
-        result = db.table("events").update(updates).match({"id": self.id}).execute()
+
+        # send the update to Supabase
+        query = db.table("events")
+        query = query.update(updates)
+        query = query.match({"id": self.id})
+        result = query.execute()
+
         if calendarIds is not None:
             oldIds = self.calendarIds or []
             newIds = calendarIds or []
-            toAdd = [c for c in newIds if c not in oldIds]
-            toRemove = [c for c in oldIds if c not in newIds]
-            Event._addEventToCalendars(self.id, toAdd)
-            Event._removeEventFromCalendars(self.id, toRemove)
+
+            # find calendars that were added to the event
+            toAdd = []
+            for calId in newIds:
+                if calId not in oldIds:
+                    toAdd.append(calId)
+
+            # find calendars that no longer need this event
+            toRemove = []
+            for calId in oldIds:
+                if calId not in newIds:
+                    toRemove.append(calId)
+
+            Event.add_to_cal(self.id, toAdd)
+            Event.rm_from_cal(self.id, toRemove)
             self.calendarIds = newIds
+
         return result

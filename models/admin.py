@@ -32,19 +32,19 @@ def _is_uuid(value: str) -> bool:
 class Admin(User):
 
     @staticmethod
-    def suspend_user_account(userId: str) -> Any:
+    def suspend_acc(userId: str) -> Any:
         # mark the account as suspended without deleting any of the users data
         db = _admin_db()
         try:
             result = db.table("users").update({"is_suspended": True}).eq("id", userId).execute()
         except Exception as err:
-            log_event("ERROR", "admin", f"suspend_user_account: failed to suspend user {userId}: {err}", userId=userId)
+            log_event("ERROR", "admin", f"suspend_acc: failed to suspend user {userId}: {err}", userId=userId)
             raise
         log_event("INFO", "admin", f"admin suspended user {userId}", userId=userId)
         return result
 
     @staticmethod
-    def send_system_wide_notifications(message: str) -> None:
+    def sys_notif(message: str) -> None:
         db = _admin_db()
 
         # turn off any currently active notification so only one banner shows at a time
@@ -55,14 +55,14 @@ class Admin(User):
         log_event("INFO", "notification", message)
 
     @staticmethod
-    def clear_active_notifications() -> None:
+    def clear_notif() -> None:
         # deactivate all notification rows
         db = _admin_db()
         db.table("notifications").update({"active": False}).eq("active", True).execute()
         log_event("INFO", "notification", "admin cleared active notifications")
 
     @staticmethod
-    def get_active_notification_message():
+    def get_notif():
         # grab the most recent active banner message
         db = _admin_db()
         query = db.table("notifications")
@@ -77,7 +77,7 @@ class Admin(User):
         return None
 
     @staticmethod
-    def find_user_by_query(query):
+    def find_user(query):
         # clean up whitespace before searching
         query = str(query).strip()
         if not query:
@@ -113,7 +113,7 @@ class Admin(User):
         return []
 
     @staticmethod
-    def toggle_user_admin(userId):
+    def op(userId):
         db = _admin_db()
 
         # look up the current admin flag for this user
@@ -134,7 +134,7 @@ class Admin(User):
         return newVal
 
     @staticmethod
-    def list_externals_for_user(userId):
+    def list_externs(userId):
         # return all external calendar rows linked to this user
         db = _admin_db()
         result = db.table("externals").select("id, provider, url").eq("user_id", userId).execute()
@@ -143,7 +143,7 @@ class Admin(User):
         return []
 
     @staticmethod
-    def unlink_external_by_id(externalId):
+    def rm_extern_id(externalId):
         db = _admin_db()
 
         # look up the owner so External.remove can keep its cleanup behavior

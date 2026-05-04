@@ -29,7 +29,7 @@ def home():
     # try loading all calendars the user has access to
     try:
         uiUser = _make_ui_user()
-        calendars = uiUser.listCalendars()
+        calendars = uiUser.list_calendars()
     except Exception as e:
         status = "error"
         message = f"Couldn't load calendars: {e}"
