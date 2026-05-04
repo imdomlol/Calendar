@@ -1,5 +1,4 @@
 import secrets
-from datetime import datetime, timedelta
 
 from flask import jsonify, redirect, request, url_for
 
@@ -112,11 +111,6 @@ def manage_events():
             message=message,
         )
 
-    # build default form times for a one hour event
-    now = datetime.now()
-    defaultStart = now.strftime("%Y-%m-%dT%H:%M")
-    defaultEnd = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M")
-
     return render_page(
         "Manage Events",
         "user/events.html",
@@ -125,8 +119,6 @@ def manage_events():
         calendars=calendars,
         selected_calendar_id=selectedCalendarId,
         events=events,
-        default_start=defaultStart,
-        default_end=defaultEnd,
     )
 
 
