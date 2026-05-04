@@ -68,7 +68,7 @@ def login():
                     isSuspended = False
                     try:
                         userQuery = calDb.table("users")
-                        userQuery = userQuery.select("is_admin, is_suspended")
+                        userQuery = userQuery.select("is_admin, is_suspended, display_name")
                         userQuery = userQuery.eq("id", uid)
                         userResult = userQuery.limit(1).execute()
 
@@ -76,6 +76,13 @@ def login():
                             userRow = userResult.data[0]
                             isAdmin = bool(userRow.get("is_admin", False))
                             isSuspended = bool(userRow.get("is_suspended", False))
+
+                            # sync display_name from auth metadata if the public row is missing it
+                            if not userRow.get("display_name"):
+                                userMeta = getattr(userObj, "user_metadata", {}) or {}
+                                authName = userMeta.get("name") or userMeta.get("full_name")
+                                if authName:
+                                    calDb.table("users").update({"display_name": authName}).eq("id", uid).execute()
                     except Exception:
                         # dont block login if the flags lookup fails
                         pass

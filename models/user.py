@@ -98,7 +98,7 @@ class User():
                 if nameResult.data:
                     friendId = nameResult.data[0]["id"]
                 else:
-                    friendId = lookup
+                    raise ValueError(f"No user found with email or display name: {lookup}")
 
         if friendId is None:
             raise ValueError("friend_id, email, or display name is required")
