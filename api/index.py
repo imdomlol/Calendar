@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, send_from_directory, url_for
+from flask import Flask, redirect, url_for
 from flask import request
 
 from api.api_routes import api_bp
@@ -27,10 +27,6 @@ app.register_blueprint(ui_bp, url_prefix="/ui")
 def welcome():
     return redirect(url_for("ui.home"))
 
-
-@app.route("/google04feea9b41e72013.html")
-def google_site_verification():
-    return send_from_directory(os.path.dirname(__file__), "google04feea9b41e72013.html")
 
 
 # ========================= Logging =========================
