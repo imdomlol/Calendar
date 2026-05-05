@@ -19,7 +19,7 @@
 
 Since we have developed a web app, installing and running on your own device is not recommended, as you would need access to all the necessary environmental variables.
 
-Here is the link to the web app: https://calendar-dominic-dionnes-projects-772c74d2.vercel.app/
+Here is the link to the web app: syncedcal.org
 
 ## Installation
 
