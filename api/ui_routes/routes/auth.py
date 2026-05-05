@@ -5,7 +5,7 @@ from api.ui_routes.helpers import (
     render_page,
     _resolve_app_base_url,
 )
-from utils.supabase_client import get_supabase_client, get_anon_supabase_client
+from utils.supabase_client import get_supabase_client
 from utils.logger import log_event
 
 
@@ -39,12 +39,10 @@ def login():
             error = "Email and password are required"
         else:
             try:
-                # anon key must be used here — service role key bypasses email confirmation
-                anonDb = get_anon_supabase_client()
                 calDb = get_supabase_client()
 
                 # send the credentials to Supabase
-                result = anonDb.auth.sign_in_with_password(
+                result = calDb.auth.sign_in_with_password(
                     {"email": email, "password": password}
                 )
 
@@ -176,8 +174,7 @@ def register():
             error = "PASSWORDS DON'T MATCH"
         else:
             try:
-                # anon key must be used here — service role key bypasses email confirmation
-                anonDb = get_anon_supabase_client()
+                calDb = get_supabase_client()
                 appBaseUrl = _resolve_app_base_url()
 
                 # build the signup options and set where Supabase should redirect after email confirmation
@@ -186,7 +183,7 @@ def register():
                 if name:
                     options["data"] = {"name": name}
 
-                anonDb.auth.sign_up(
+                calDb.auth.sign_up(
                     {"email": email, "password": password, "options": options}
                 )
                 log_event(
