@@ -483,6 +483,72 @@ class External:
 
     # ========================= Pull and Push =========================
 
+    # delete every existing event from the linked users primary Google calendar
+    def _clear_google_events(self, extData: dict, clientId: str, clientSecret: str) -> tuple[int, str | None]:
+        accessToken = extData.get("access_token")
+        url = extData.get("url")
+        apiUrl = f"{url}/calendars/primary/events"
+        headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+
+        deleted = 0
+        refreshed = False
+
+        while True:
+            response = requests.get(
+                apiUrl,
+                headers=headers,
+                params={"maxResults": 2500, "showDeleted": "false"},
+            )
+
+            # 401 means the token is expired so we try refreshing once
+            if response.status_code == 401 and not refreshed:
+                newToken = self._refresh_access_token(extData, clientId, clientSecret)
+
+                if not newToken:
+                    return deleted, "token_expired"
+
+                headers["Authorization"] = f"Bearer {newToken}"
+                extData["access_token"] = newToken
+                refreshed = True
+                response = requests.get(
+                    apiUrl,
+                    headers=headers,
+                    params={"maxResults": 2500, "showDeleted": "false"},
+                )
+
+            if response.status_code != 200:
+                return deleted, f"google_clear_failed:{response.status_code}"
+
+            events = response.json().get("items") or []
+            if not events:
+                break
+
+            for event in events:
+                eventId = event.get("id")
+                if not eventId:
+                    continue
+
+                deleteUrl = f"{apiUrl}/{eventId}"
+                deleteResponse = requests.delete(deleteUrl, headers=headers)
+
+                if deleteResponse.status_code == 401 and not refreshed:
+                    newToken = self._refresh_access_token(extData, clientId, clientSecret)
+
+                    if not newToken:
+                        return deleted, "token_expired"
+
+                    headers["Authorization"] = f"Bearer {newToken}"
+                    extData["access_token"] = newToken
+                    refreshed = True
+                    deleteResponse = requests.delete(deleteUrl, headers=headers)
+
+                if deleteResponse.status_code in (204, 404, 410):
+                    deleted += 1
+                else:
+                    return deleted, f"google_clear_failed:{deleteResponse.status_code}"
+
+        return deleted, None
+
     # this fetches events from the external calendar provider and saves them in supabase
     def pull_cal_data(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
         db = self.supabaseClient
@@ -640,7 +706,7 @@ class External:
 
     # this pushes local events from this app out to the external calendar provider
     # it includes synced calendars, so imported events can be pushed back for now
-    def push_cal_data(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
+    def push_cal_data(self, externalId: str, client_id: str | None = None, client_secret: str | None = None, force_clear: bool = False) -> Any:
         db = self.supabaseClient
 
         # look up external
@@ -664,12 +730,27 @@ class External:
             calIds = []
             for c in (cals.data or []):
                 calIds.append(c["id"])
-            if not calIds:
-                return {"pushed": 0}
 
             # build the url for the Google Calendar events
             apiUrl = f"{url}/calendars/primary/events"
             headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+            deleted = 0
+            if force_clear:
+                deleted, clearError = self._clear_google_events(
+                    ext.data,
+                    client_id or "",
+                    client_secret or "",
+                )
+                if clearError:
+                    return {"error": clearError, "deleted": deleted}
+
+                # the clear step may have refreshed the token in ext.data
+                accessToken = ext.data.get("access_token")
+                headers["Authorization"] = f"Bearer {accessToken}"
+
+            if not calIds:
+                return {"pushed": 0, "deleted": deleted}
+
             pushed = 0
             refreshed = False
             chunk_size = 200
@@ -716,7 +797,7 @@ class External:
 
                 offset += chunk_size
 
-            return {"pushed": pushed}
+            return {"pushed": pushed, "deleted": deleted}
 
         elif provider == "outlook":
             cals = db.table("calendars").select("id").eq("owner_id", userId).execute()
