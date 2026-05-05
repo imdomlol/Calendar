@@ -549,6 +549,64 @@ class External:
 
         return deleted, None
 
+    # delete every existing event from the linked users Outlook calendar
+    def _clear_outlook_events(self, extData: dict, clientId: str, clientSecret: str) -> tuple[int, str | None]:
+        accessToken = extData.get("access_token")
+        apiUrl = "https://graph.microsoft.com/v1.0/me/events"
+        headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+
+        deleted = 0
+        refreshed = False
+
+        while True:
+            response = requests.get(apiUrl, headers=headers, params={"$select": "id", "$top": 100})
+
+            # 401 means the token is expired so we try refreshing once
+            if response.status_code == 401 and not refreshed:
+                newToken = self._refresh_access_token(extData, clientId, clientSecret)
+
+                if not newToken:
+                    return deleted, "token_expired"
+
+                headers["Authorization"] = f"Bearer {newToken}"
+                extData["access_token"] = newToken
+                refreshed = True
+                response = requests.get(apiUrl, headers=headers, params={"$select": "id", "$top": 100})
+
+            if response.status_code != 200:
+                return deleted, f"outlook_clear_failed:{response.status_code}"
+
+            data = response.json()
+            events = data.get("value") or []
+            if not events:
+                break
+
+            for event in events:
+                eventId = event.get("id")
+                if not eventId:
+                    continue
+
+                deleteUrl = f"{apiUrl}/{eventId}"
+                deleteResponse = requests.delete(deleteUrl, headers=headers)
+
+                if deleteResponse.status_code == 401 and not refreshed:
+                    newToken = self._refresh_access_token(extData, clientId, clientSecret)
+
+                    if not newToken:
+                        return deleted, "token_expired"
+
+                    headers["Authorization"] = f"Bearer {newToken}"
+                    extData["access_token"] = newToken
+                    refreshed = True
+                    deleteResponse = requests.delete(deleteUrl, headers=headers)
+
+                if deleteResponse.status_code in (204, 404, 410):
+                    deleted += 1
+                else:
+                    return deleted, f"outlook_clear_failed:{deleteResponse.status_code}"
+
+        return deleted, None
+
     # this fetches events from the external calendar provider and saves them in supabase
     def pull_cal_data(self, externalId: str, client_id: str | None = None, client_secret: str | None = None) -> Any:
         db = self.supabaseClient
@@ -806,11 +864,26 @@ class External:
             calIds = []
             for c in (cals.data or []):
                 calIds.append(c["id"])
-            if not calIds:
-                return {"pushed": 0}
 
             apiUrl = "https://graph.microsoft.com/v1.0/me/events"
             headers = {"Authorization": f"Bearer {accessToken}", "Content-Type": "application/json"}
+            deleted = 0
+            if force_clear:
+                deleted, clearError = self._clear_outlook_events(
+                    ext.data,
+                    client_id or "",
+                    client_secret or "",
+                )
+                if clearError:
+                    return {"error": clearError, "deleted": deleted}
+
+                # the clear step may have refreshed the token in ext.data
+                accessToken = ext.data.get("access_token")
+                headers["Authorization"] = f"Bearer {accessToken}"
+
+            if not calIds:
+                return {"pushed": 0, "deleted": deleted}
+
             pushed = 0
             refreshed = False
             chunk_size = 200
@@ -855,7 +928,7 @@ class External:
 
                 offset += chunk_size
                 
-            return {"pushed": pushed}
+            return {"pushed": pushed, "deleted": deleted}
 
         else:
             return {"error": f"Provider '{provider}' not supported"}
