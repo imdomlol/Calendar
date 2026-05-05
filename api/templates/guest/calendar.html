@@ -82,7 +82,7 @@ function fmtTime(ts) {
   if (!ts) return '';
   var d = new Date(ts);
   if (isNaN(d.getTime())) return '';
-  return p2(d.getHours()) + ':' + p2(d.getMinutes());
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 function toDatetimeLocal(utcStr) {
   if (!utcStr) return '';
