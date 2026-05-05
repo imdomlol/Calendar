@@ -54,6 +54,7 @@ def login():
 
                 # check if we got a real user back
                 hasUid = uid is not None
+                emailConfirmed = getattr(userObj, "email_confirmed_at", None) is not None
                 if not hasUid:
                     log_event(
                         "WARNING",
@@ -62,6 +63,14 @@ def login():
                         details="email: " + email,
                     )
                     error = "Wrong email or password"
+                elif not emailConfirmed:
+                    log_event(
+                        "WARNING",
+                        "auth",
+                        "login failed - email not verified",
+                        details="email: " + email,
+                    )
+                    error = "Please verify your email address before logging in. Check your inbox for a confirmation link."
                 else:
                     # look up suspension and admin flags from the users table
                     isAdmin = False
