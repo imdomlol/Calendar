@@ -27,6 +27,12 @@ def _sync_error_message(error: str, provider: str) -> str:
     if error == "token_expired":
         return f"Your {provider} access has expired, please reconnect your account."
 
+    if error.startswith("google_clear_failed"):
+        return "Google Calendar could not be cleared before pushing. Please reconnect Google and try again."
+
+    if error.startswith("outlook_clear_failed"):
+        return "Outlook Calendar could not be cleared before pushing. Please reconnect Outlook and try again."
+
     return error
 
 
@@ -328,6 +334,42 @@ def settings_push_google(externalId):
         )
 
 
+@ui_bp.route("/settings/external/google/<externalId>/force", methods=["POST"])
+@ui_login_required
+def settings_force_google(externalId):
+    # clear Google first, then push local events back to Google
+    userId = _ui_user()["id"]
+    clientId, clientSecret = _google_oauth_config()
+
+    try:
+        db = get_supabase_client()
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
+        result = ext.push_cal_data(
+            externalId,
+            client_id=clientId,
+            client_secret=clientSecret,
+            force_clear=True,
+        )
+
+        if "error" in result:
+            message = _sync_error_message(result["error"], "Google")
+            return redirect(url_for("ui.settings_page", status="error", message=message))
+
+        pushed = result.get("pushed", 0)
+        deleted = result.get("deleted", 0)
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="ok",
+                message=f"Cleared {deleted} Google events, then pushed {pushed} events.",
+            )
+        )
+    except Exception as error:
+        return redirect(
+            url_for("ui.settings_page", status="error", message=f"Force push failed: {error}")
+        )
+
+
 # ========================= Outlook OAuth Routes =========================
 
 
@@ -575,4 +617,40 @@ def settings_push_outlook(externalId):
         # report the unexpected push failure to the user
         return redirect(
             url_for("ui.settings_page", status="error", message=f"Push failed: {error}")
+        )
+
+
+@ui_bp.route("/settings/external/outlook/<externalId>/force", methods=["POST"])
+@ui_login_required
+def settings_force_outlook(externalId):
+    # clear Outlook first, then push local events back to Outlook
+    userId = _ui_user()["id"]
+    clientId, clientSecret = _outlook_oauth_config()
+
+    try:
+        db = get_supabase_client()
+        ext = External(id=externalId, supabaseClient=db, userId=userId)
+        result = ext.push_cal_data(
+            externalId,
+            client_id=clientId,
+            client_secret=clientSecret,
+            force_clear=True,
+        )
+
+        if "error" in result:
+            message = _sync_error_message(result["error"], "Outlook")
+            return redirect(url_for("ui.settings_page", status="error", message=message))
+
+        pushed = result.get("pushed", 0)
+        deleted = result.get("deleted", 0)
+        return redirect(
+            url_for(
+                "ui.settings_page",
+                status="ok",
+                message=f"Cleared {deleted} Outlook events, then pushed {pushed} events.",
+            )
+        )
+    except Exception as error:
+        return redirect(
+            url_for("ui.settings_page", status="error", message=f"Force push failed: {error}")
         )

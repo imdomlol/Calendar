@@ -82,7 +82,17 @@ function fmtTime(ts) {
   if (!ts) return '';
   var d = new Date(ts);
   if (isNaN(d.getTime())) return '';
-  return p2(d.getHours()) + ':' + p2(d.getMinutes());
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function toDatetimeLocal(utcStr) {
+  if (!utcStr) return '';
+  var d = new Date(utcStr);
+  if (isNaN(d.getTime())) return '';
+  var offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+}
+function localInputToIso(localStr) {
+  return localStr ? new Date(localStr).toISOString() : null;
 }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -102,8 +112,8 @@ function createGuestEvent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             title: title,
-            start_timestamp: start || null,
-            end_timestamp: end || null,
+            start_timestamp: localInputToIso(start),
+            end_timestamp: localInputToIso(end),
             description: desc || null
         })
     }).then(function(r) {
@@ -122,8 +132,8 @@ function editGuestEvent(eventId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             title: title || null,
-            start_timestamp: start || null,
-            end_timestamp: end || null,
+            start_timestamp: localInputToIso(start),
+            end_timestamp: localInputToIso(end),
             description: desc || null
         })
     }).then(function(r) {
@@ -212,8 +222,8 @@ function renderDay() {
     evs.forEach(ev => {
       const start = fmtTime(ev.start_timestamp);
       const end   = fmtTime(ev.end_timestamp);
-      const svStart = ev.start_timestamp ? ev.start_timestamp.substring(0,16) : '';
-      const svEnd   = ev.end_timestamp   ? ev.end_timestamp.substring(0,16)   : '';
+      const svStart = toDatetimeLocal(ev.start_timestamp);
+      const svEnd   = toDatetimeLocal(ev.end_timestamp);
 
       eventCards += `
         <div style="border:1px solid #e2e8f0; border-radius:10px; padding:14px; margin-bottom:10px;">
