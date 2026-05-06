@@ -5,7 +5,7 @@ from api.ui_routes.helpers import (
     render_page,
     _resolve_app_base_url,
 )
-from utils.supabase_client import get_supabase_client
+from utils.supabase_client import get_supabase_client, get_auth_client
 from utils.logger import log_event
 
 
@@ -24,12 +24,12 @@ def login():
     # check the next param first and fall back to the dashboard
     nextPath = (
         (request.args.get("next") or "").strip()
-        or url_for("ui.dashboard", role="user")
+        or url_for("ui.home")
     )
 
     # only allow relative paths to stop redirects
     if not nextPath.startswith("/"):
-        nextPath = url_for("ui.dashboard", role="user")
+        nextPath = url_for("ui.home")
 
     if request.method == "POST":
         email = (request.form.get("email") or "").strip()
@@ -39,10 +39,14 @@ def login():
             error = "Email and password are required"
         else:
             try:
-                calDb = get_supabase_client()
+                # use the anon-key client for auth — sign_in_with_password triggers a
+                # supabase-py v2 auth event that would overwrite the service-role client's
+                # PostgREST Authorization header, breaking subsequent DB operations
+                authClient = get_auth_client()
+                db = get_supabase_client()
 
                 # send the credentials to Supabase
-                result = calDb.auth.sign_in_with_password(
+                result = authClient.auth.sign_in_with_password(
                     {"email": email, "password": password}
                 )
 
@@ -76,7 +80,7 @@ def login():
                     isAdmin = False
                     isSuspended = False
                     try:
-                        userQuery = calDb.table("users")
+                        userQuery = db.table("users")
                         userQuery = userQuery.select("is_admin, is_suspended, display_name")
                         userQuery = userQuery.eq("id", uid)
                         userResult = userQuery.limit(1).execute()
@@ -91,7 +95,7 @@ def login():
                                 userMeta = getattr(userObj, "user_metadata", {}) or {}
                                 authName = userMeta.get("name") or userMeta.get("full_name")
                                 if authName:
-                                    calDb.table("users").update({"display_name": authName}).eq("id", uid).execute()
+                                    db.table("users").update({"display_name": authName}).eq("id", uid).execute()
                     except Exception:
                         # dont block login if the flags lookup fails
                         pass
@@ -153,12 +157,12 @@ def register():
 
     nextPath = (
         (request.args.get("next") or "").strip()
-        or url_for("ui.dashboard", role="user")
+        or url_for("ui.home")
     )
 
     # same redirect safety check as login
     if not nextPath.startswith("/"):
-        nextPath = url_for("ui.dashboard", role="user")
+        nextPath = url_for("ui.home")
 
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
@@ -174,7 +178,7 @@ def register():
             error = "PASSWORDS DON'T MATCH"
         else:
             try:
-                calDb = get_supabase_client()
+                authClient = get_auth_client()
                 appBaseUrl = _resolve_app_base_url()
 
                 # build the signup options and set where Supabase should redirect after email confirmation
@@ -183,7 +187,7 @@ def register():
                 if name:
                     options["data"] = {"name": name}
 
-                calDb.auth.sign_up(
+                authClient.auth.sign_up(
                     {"email": email, "password": password, "options": options}
                 )
                 log_event(

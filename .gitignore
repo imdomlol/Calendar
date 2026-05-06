@@ -44,4 +44,7 @@ Thumbs.db
 .claude
 CLAUDE.md
 .codex
+.agents
 
+.vercel
+.env*.local

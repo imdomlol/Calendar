@@ -4,6 +4,7 @@ from api.ui_routes.helpers import (
     _ui_user,
     _make_ui_user,
     render_page,
+    ui_admin_required,
 )
 from models.calendar import Calendar
 
@@ -86,9 +87,8 @@ def brand_home():
     return redirect(url_for("ui.home"))
 
 
-# admin dashboard page, checks login then renders the template
+# admin dashboard page, requires admin role
 @ui_bp.route("/dashboard/admin")
+@ui_admin_required
 def dashboard():
-    if not _ui_user():
-        return redirect(url_for("ui.login", next=request.path))
     return render_page("Admin Dashboard", "home/dashboard.html")
